@@ -1,3 +1,6 @@
+// Normalize escaped newlines in PEM key BEFORE any imports read process.env
+process.env.CDP_API_KEY_SECRET = process.env.CDP_API_KEY_SECRET?.replace(/\\n/g, '\n') || '';
+
 import { CdpClient } from '@coinbase/cdp-sdk';
 import { logger } from '../middleware/logger';
 
@@ -9,12 +12,12 @@ let _smartAccount: SmartAccount | null = null;
 
 function getCdpClient(): CdpClient {
   if (!_cdp) {
-    // Normalize escaped newlines so PEM keys pasted as single-line strings work correctly
-    if (process.env.CDP_API_KEY_SECRET) {
-      process.env.CDP_API_KEY_SECRET = process.env.CDP_API_KEY_SECRET.replace(/\\n/g, '\n');
-    }
-    // CdpClient auto-reads CDP_API_KEY_ID, CDP_API_KEY_SECRET, CDP_WALLET_SECRET from env
-    _cdp = new CdpClient();
+    console.log('Key format debug:', process.env.CDP_API_KEY_SECRET?.substring(0, 30));
+    _cdp = new CdpClient({
+      apiKeyId: process.env.CDP_API_KEY_ID,
+      apiKeySecret: process.env.CDP_API_KEY_SECRET?.replace(/\\n/g, '\n'),
+      walletSecret: process.env.CDP_WALLET_SECRET,
+    });
   }
   return _cdp;
 }
