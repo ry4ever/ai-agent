@@ -16,7 +16,6 @@
  */
 
 import 'dotenv/config';
-import { createPrivateKey } from 'crypto';
 import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
 import { CdpClient } from '@coinbase/cdp-sdk';
 import { x402Client, x402HTTPClient } from '@x402/core/client';
@@ -32,19 +31,12 @@ const AGENT_ACCOUNT_NAME = 'seed-test-agent';
 
 function normalizeApiKeySecret(raw: string | undefined): string | undefined {
   if (!raw) return raw;
-  // Expand literal \n sequences (single-line .env storage), then strip \r so
-  // that Windows CRLF line endings inside the PEM block don't corrupt the DER.
-  const pem = raw.replace(/\\n/g, '\n').replace(/\r/g, '');
-  if (pem.includes('-----BEGIN EC PRIVATE KEY-----')) {
-    try {
-      return createPrivateKey({ key: pem, format: 'pem' })
-        .export({ type: 'pkcs8', format: 'pem' }) as string;
-    } catch {
-      // Conversion failed; return the cleaned PEM and let the CDP SDK try
-      return pem;
-    }
-  }
-  return pem;
+  // Expand literal \n sequences (single-line .env storage) and strip \r so
+  // that Windows CRLF line endings don't corrupt the PEM block.
+  // Pass the result directly to CdpClient — the SDK handles PEM internally.
+  const key = raw.replace(/\\n/g, '\n').replace(/\r/g, '');
+  log(`[debug] apiKeySecret head="${key.slice(0, 40)}" tail="${key.slice(-40)}"`);
+  return key;
 }
 
 function sleep(ms: number): Promise<void> {
