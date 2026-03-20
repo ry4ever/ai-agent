@@ -34,8 +34,13 @@ function normalizeApiKeySecret(raw: string | undefined): string | undefined {
   if (!raw) return raw;
   const pem = raw.replace(/\\n/g, '\n');
   if (pem.includes('-----BEGIN EC PRIVATE KEY-----')) {
-    return createPrivateKey({ key: pem, format: 'pem' })
-      .export({ type: 'pkcs8', format: 'pem' }) as string;
+    try {
+      return createPrivateKey({ key: pem, format: 'pem' })
+        .export({ type: 'pkcs8', format: 'pem' }) as string;
+    } catch {
+      // Key is already usable as-is (e.g. different EC variant or already PKCS#8)
+      return pem;
+    }
   }
   return pem;
 }
