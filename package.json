@@ -11,7 +11,7 @@
     "db:migrate": "ts-node src/db/migrate.ts",
     "lint": "eslint src --ext .ts",
     "typecheck": "tsc --noEmit",
-    "seed": "ts-node scripts/seed-transactions.ts",
+    "seed": "ts-node src/scripts/seed-transactions.ts",
     "mcp": "ts-node src/mcp/server.ts"
   },
   "dependencies": {
