@@ -9,6 +9,10 @@ let _smartAccount: SmartAccount | null = null;
 
 function getCdpClient(): CdpClient {
   if (!_cdp) {
+    // Normalize escaped newlines so PEM keys pasted as single-line strings work correctly
+    if (process.env.CDP_API_KEY_SECRET) {
+      process.env.CDP_API_KEY_SECRET = process.env.CDP_API_KEY_SECRET.replace(/\\n/g, '\n');
+    }
     // CdpClient auto-reads CDP_API_KEY_ID, CDP_API_KEY_SECRET, CDP_WALLET_SECRET from env
     _cdp = new CdpClient();
   }
