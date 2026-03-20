@@ -1,8 +1,6 @@
-// Normalize escaped newlines in PEM key BEFORE any imports read process.env
-process.env.CDP_API_KEY_SECRET = process.env.CDP_API_KEY_SECRET?.replace(/\\n/g, '\n') || '';
-
 import { CdpClient } from '@coinbase/cdp-sdk';
 import { logger } from '../middleware/logger';
+import { createPrivateKey } from 'crypto';
 
 // Types inferred from CDP SDK v2
 type SmartAccount = Awaited<ReturnType<CdpClient['evm']['getOrCreateSmartAccount']>>;
@@ -10,12 +8,28 @@ type SmartAccount = Awaited<ReturnType<CdpClient['evm']['getOrCreateSmartAccount
 let _cdp: CdpClient | null = null;
 let _smartAccount: SmartAccount | null = null;
 
+/**
+ * Normalizes the CDP API key secret:
+ * 1. Replaces literal \n with real newlines (for env vars stored on one line)
+ * 2. Converts SEC1 EC key (-----BEGIN EC PRIVATE KEY-----) to PKCS#8
+ *    (-----BEGIN PRIVATE KEY-----) which the CDP SDK's jose library requires
+ */
+function normalizeApiKeySecret(raw: string | undefined): string | undefined {
+  if (!raw) return raw;
+  const pem = raw.replace(/\\n/g, '\n');
+  if (pem.includes('-----BEGIN EC PRIVATE KEY-----')) {
+    const pkcs8 = createPrivateKey({ key: pem, format: 'pem' })
+      .export({ type: 'pkcs8', format: 'pem' }) as string;
+    return pkcs8;
+  }
+  return pem;
+}
+
 function getCdpClient(): CdpClient {
   if (!_cdp) {
-    console.log('Key format debug:', process.env.CDP_API_KEY_SECRET?.substring(0, 30));
     _cdp = new CdpClient({
       apiKeyId: process.env.CDP_API_KEY_ID,
-      apiKeySecret: process.env.CDP_API_KEY_SECRET?.replace(/\\n/g, '\n'),
+      apiKeySecret: normalizeApiKeySecret(process.env.CDP_API_KEY_SECRET),
       walletSecret: process.env.CDP_WALLET_SECRET,
     });
   }
