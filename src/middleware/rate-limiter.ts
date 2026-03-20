@@ -41,6 +41,11 @@ export function initRateLimiter(): void {
 }
 
 export function rateLimitByAgent(req: Request, res: Response, next: NextFunction): void {
+  // Exclude health checks and well-known discovery endpoints from rate limiting
+  if (req.path === '/health' || req.path.startsWith('/.well-known/')) {
+    return next();
+  }
+
   // Key by agent wallet address if present, otherwise by IP
   const key = (req.headers['x-agent-address'] as string) ?? req.ip ?? 'unknown';
 

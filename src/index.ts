@@ -38,6 +38,7 @@ app.use(rateLimitByAgent);
 app.get('/health', healthHandler);
 app.get('/.well-known/agent-services', registryHandler);
 app.get('/.well-known/agent.json', agentCardHandler);
+app.get('/.well-known/agent-card.json', agentCardHandler);
 
 // --- x402 Paywalled Routes ---
 // A single paymentMiddleware instance (from x402-bazaar-config.ts) covers all routes.

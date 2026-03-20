@@ -10,9 +10,9 @@ export function agentCardHandler(_req: Request, res: Response): void {
     name: 'AiScale Agent Services',
     description:
       'The marketplace where AI agents buy data, intelligence, and skills. Pay-per-request via x402 micropayments in USDC on Base L2. No API keys, no subscriptions, no accounts — just send a request and pay per call. Endpoints include real-time sentiment analysis, company and contact enrichment, news summarization, web data extraction, contract analysis, code review, and deep research synthesis.',
-    url: `${process.env.PROVIDER_URL ?? 'https://aiscale.pro'}/a2a`,
+    url: `${process.env.AGENT_URL ?? 'https://agents.aiscale.pro'}/a2a`,
     version: '1.0.0',
-    documentationUrl: `${process.env.PROVIDER_URL ?? 'https://aiscale.pro'}/docs`,
+    documentationUrl: `${process.env.AGENT_URL ?? 'https://agents.aiscale.pro'}/docs`,
     provider: {
       organization: process.env.PROVIDER_NAME ?? 'AiScale',
       url: process.env.PROVIDER_URL ?? 'https://aiscale.pro',
@@ -172,7 +172,7 @@ export function agentCardHandler(_req: Request, res: Response): void {
         research_synthesizer:  { price: `$${microToUSD(PRICING.RESEARCH_SYNTH)}`,     amountRaw: PRICING.RESEARCH_SYNTH,     endpoint: 'POST /api/v1/research' },
       },
       bazaarDiscovery: 'https://api.cdp.coinbase.com/platform/v2/x402/discovery/resources',
-      serviceDiscovery: `${process.env.PROVIDER_URL ?? 'https://aiscale.pro'}/.well-known/agent-services`,
+      serviceDiscovery: `${process.env.AGENT_URL ?? 'https://agents.aiscale.pro'}/.well-known/agent-services`,
     },
   };
 
