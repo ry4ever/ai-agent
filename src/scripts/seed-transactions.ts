@@ -32,13 +32,15 @@ const AGENT_ACCOUNT_NAME = 'seed-test-agent';
 
 function normalizeApiKeySecret(raw: string | undefined): string | undefined {
   if (!raw) return raw;
-  const pem = raw.replace(/\\n/g, '\n');
+  // Expand literal \n sequences (single-line .env storage), then strip \r so
+  // that Windows CRLF line endings inside the PEM block don't corrupt the DER.
+  const pem = raw.replace(/\\n/g, '\n').replace(/\r/g, '');
   if (pem.includes('-----BEGIN EC PRIVATE KEY-----')) {
     try {
       return createPrivateKey({ key: pem, format: 'pem' })
         .export({ type: 'pkcs8', format: 'pem' }) as string;
     } catch {
-      // Key is already usable as-is (e.g. different EC variant or already PKCS#8)
+      // Conversion failed; return the cleaned PEM and let the CDP SDK try
       return pem;
     }
   }
