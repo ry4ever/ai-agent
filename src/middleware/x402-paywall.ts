@@ -1,6 +1,6 @@
 import { paymentMiddleware } from '@x402/express';
 import { x402ResourceServer, HTTPFacilitatorClient } from '@x402/core/server';
-import { registerExactEvmScheme } from '@x402/evm/exact/server';
+import { ExactEvmScheme } from '@x402/evm/exact/server';
 import { bazaarResourceServerExtension, declareDiscoveryExtension } from '@x402/extensions/bazaar';
 import { RequestHandler } from 'express';
 import { PRICING, microToUSD } from '../config/pricing';
@@ -34,10 +34,14 @@ export function getResourceServer(): x402ResourceServer {
   if (_resourceServer) return _resourceServer;
 
   const facilitatorUrl = process.env.X402_FACILITATOR_URL ?? 'https://x402.org/facilitator';
-  const facilitatorClient = new HTTPFacilitatorClient({ url: facilitatorUrl });
 
-  _resourceServer = new x402ResourceServer(facilitatorClient);
-  registerExactEvmScheme(_resourceServer);
+  // HTTPFacilitatorClient takes a plain URL string (confirmed from @x402/core source)
+  const facilitatorClient = new HTTPFacilitatorClient(facilitatorUrl);
+
+  // Register both networks so the same server handles testnet + mainnet
+  _resourceServer = new x402ResourceServer(facilitatorClient)
+    .register('eip155:84532', new ExactEvmScheme())  // Base Sepolia (testnet)
+    .register('eip155:8453', new ExactEvmScheme());   // Base Mainnet
 
   // Register Bazaar discovery extension so the facilitator can catalog our services
   _resourceServer.registerExtension(bazaarResourceServerExtension);
@@ -119,12 +123,14 @@ export function createPaywall(
   return paymentMiddleware(
     {
       [routeKey]: {
-        accepts: {
-          scheme: 'exact',
-          price: priceUSD,
-          network,
-          payTo,
-        },
+        accepts: [
+          {
+            scheme: 'exact',
+            price: priceUSD,
+            network,
+            payTo,
+          },
+        ],
         description,
         extensions: {
           ...declareDiscoveryExtension(discovery),
