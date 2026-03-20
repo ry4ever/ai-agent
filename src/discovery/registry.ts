@@ -3,7 +3,7 @@ import { SERVICE_DEFINITIONS } from '../config/services';
 
 export function registryHandler(_req: Request, res: Response): void {
   res.json({
-    provider: process.env.PROVIDER_NAME ?? 'AgentServices',
+    provider: process.env.PROVIDER_NAME ?? 'AiScale',
     providerUrl: process.env.PROVIDER_URL ?? '',
     x402Version: 1,
     network: process.env.NETWORK ?? 'base-sepolia',
