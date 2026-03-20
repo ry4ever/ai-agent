@@ -22,6 +22,7 @@ COPY package*.json ./
 RUN npm ci --only=production && npm cache clean --force
 
 COPY --from=builder /app/dist ./dist
+COPY src/db/migrations ./dist/db/migrations
 
 USER appuser
 

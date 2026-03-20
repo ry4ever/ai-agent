@@ -4,7 +4,7 @@
   "description": "Crypto-native micropayment platform for AI agent services via x402 protocol on Base L2",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && cp -r src/db/migrations dist/db/",
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
     "dev:watch": "ts-node-dev --respawn --transpile-only src/index.ts",
