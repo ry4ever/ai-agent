@@ -15,7 +15,7 @@ export function getResourceServer(): x402ResourceServer {
 
   const facilitatorUrl = process.env.X402_FACILITATOR_URL ?? 'https://x402.org/facilitator';
 
-  const facilitatorClient = new HTTPFacilitatorClient(facilitatorUrl);
+  const facilitatorClient = new HTTPFacilitatorClient({ url: facilitatorUrl });
 
   _resourceServer = new x402ResourceServer(facilitatorClient)
     .register('eip155:84532', new ExactEvmScheme())  // Base Sepolia (testnet)

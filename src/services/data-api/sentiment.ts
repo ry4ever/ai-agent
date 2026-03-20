@@ -15,7 +15,7 @@ interface SentimentResult {
 }
 
 export async function sentimentHandler(req: Request, res: Response): Promise<void> {
-  const ticker = (req.params.ticker ?? '').toUpperCase().trim();
+  const ticker = ((req.params['ticker'] as string) ?? '').toUpperCase().trim();
 
   if (!ticker || !/^[A-Z0-9.]{1,10}$/.test(ticker)) {
     res.status(400).json({ error: 'Invalid ticker symbol' });

@@ -20,7 +20,7 @@ interface CompanyProfile {
 }
 
 export async function companyHandler(req: Request, res: Response): Promise<void> {
-  const domain = (req.params.domain ?? '').toLowerCase().trim();
+  const domain = ((req.params['domain'] as string) ?? '').toLowerCase().trim();
 
   if (!domain || !/^[a-z0-9.-]{3,100}$/.test(domain)) {
     res.status(400).json({ error: 'Invalid domain name' });

@@ -49,7 +49,7 @@ export async function getOrCreateSmartAccount(): Promise<SmartAccount | null> {
     logger.info('Owner EOA ready', { address: owner.address });
 
     // Step 2: ERC-4337 smart contract wallet owned by the EOA
-    _smartAccount = await cdp.evm.getOrCreateSmartAccount({ owner });
+    _smartAccount = await cdp.evm.getOrCreateSmartAccount({ name: 'agent-smart-account', owner });
     logger.info('Smart account ready', { address: _smartAccount.address });
 
     return _smartAccount;

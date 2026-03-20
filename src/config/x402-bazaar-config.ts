@@ -20,8 +20,8 @@ const NETWORK_MAP: Record<string, string> = {
   'base-sepolia': 'eip155:84532',
 };
 
-function getNetwork(): string {
-  return NETWORK_MAP[process.env.NETWORK ?? 'base-sepolia'] ?? 'eip155:84532';
+function getNetwork(): `${string}:${string}` {
+  return (NETWORK_MAP[process.env.NETWORK ?? 'base-sepolia'] ?? 'eip155:84532') as `${string}:${string}`;
 }
 
 function getPayTo(): string {

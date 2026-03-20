@@ -18,7 +18,7 @@ interface EmailEnrichment {
 }
 
 export async function enrichHandler(req: Request, res: Response): Promise<void> {
-  const email = (req.params.email ?? '').toLowerCase().trim();
+  const email = ((req.params['email'] as string) ?? '').toLowerCase().trim();
 
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     res.status(400).json({ error: 'Invalid email address' });
