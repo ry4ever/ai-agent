@@ -1,41 +1,65 @@
-import { Coinbase, Wallet } from '@coinbase/coinbase-sdk';
+import { CdpClient } from '@coinbase/cdp-sdk';
 import { logger } from '../middleware/logger';
 
-let wallet: Wallet | null = null;
+// Types inferred from CDP SDK v2
+type SmartAccount = Awaited<ReturnType<CdpClient['evm']['getOrCreateSmartAccount']>>;
+
+let _cdp: CdpClient | null = null;
+let _smartAccount: SmartAccount | null = null;
+
+function getCdpClient(): CdpClient {
+  if (!_cdp) {
+    // CdpClient auto-reads CDP_API_KEY_ID, CDP_API_KEY_SECRET, CDP_WALLET_SECRET from env
+    _cdp = new CdpClient();
+  }
+  return _cdp;
+}
 
 export async function initWallet(): Promise<void> {
-  const keyId = process.env.COINBASE_API_KEY_ID;
-  const keySecret = process.env.COINBASE_API_KEY_SECRET;
+  const keyId = process.env.CDP_API_KEY_ID;
+  const keySecret = process.env.CDP_API_KEY_SECRET;
+  const walletSecret = process.env.CDP_WALLET_SECRET;
 
-  if (!keyId || !keySecret) {
-    logger.warn('Coinbase CDP credentials not set — wallet management disabled');
+  if (!keyId || !keySecret || !walletSecret) {
+    logger.warn('CDP credentials not set (CDP_API_KEY_ID, CDP_API_KEY_SECRET, CDP_WALLET_SECRET) — wallet management disabled');
     return;
   }
 
   try {
-    Coinbase.configure({ apiKeyName: keyId, privateKey: keySecret });
-    logger.info('Coinbase CDP SDK initialized');
+    const smartAccount = await getOrCreateSmartAccount();
+    if (smartAccount) {
+      logger.info('Smart account initialized', { address: smartAccount.address });
+    }
   } catch (err) {
-    logger.error('Failed to initialize Coinbase CDP SDK', { err });
+    logger.error('Failed to initialize CDP smart account', { err });
   }
 }
 
-export async function getOrCreateWallet(): Promise<Wallet | null> {
-  if (wallet) return wallet;
+export async function getOrCreateSmartAccount(): Promise<SmartAccount | null> {
+  if (_smartAccount) return _smartAccount;
 
-  const keyId = process.env.COINBASE_API_KEY_ID;
+  const keyId = process.env.CDP_API_KEY_ID;
   if (!keyId) return null;
 
   try {
-    wallet = await Wallet.create({ networkId: process.env.NETWORK ?? 'base-sepolia' });
-    logger.info('Wallet created', { address: (await wallet.getDefaultAddress()).getId() });
-    return wallet;
+    const cdp = getCdpClient();
+
+    // Step 1: Persistent named EOA — same address on every run
+    const owner = await cdp.evm.getOrCreateAccount({ name: 'agent-owner' });
+    logger.info('Owner EOA ready', { address: owner.address });
+
+    // Step 2: ERC-4337 smart contract wallet owned by the EOA
+    _smartAccount = await cdp.evm.getOrCreateSmartAccount({ owner });
+    logger.info('Smart account ready', { address: _smartAccount.address });
+
+    return _smartAccount;
   } catch (err) {
-    logger.error('Failed to create wallet', { err });
+    logger.error('Failed to create smart account', { err });
     return null;
   }
 }
 
 export function getWalletAddress(): string {
-  return process.env.WALLET_ADDRESS ?? '';
+  // Prefer the live smart account address; fall back to WALLET_ADDRESS env var
+  return _smartAccount?.address ?? process.env.WALLET_ADDRESS ?? '';
 }

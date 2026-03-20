@@ -4,7 +4,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import { requestLogger, logger } from './middleware/logger';
 import { initRateLimiter, rateLimitByAgent } from './middleware/rate-limiter';
-import { getPaywalls } from './middleware/x402-paywall';
+import { getPaywall } from './middleware/x402-paywall';
 import { trackRevenue } from './payments/revenue-tracker';
 import { initWallet } from './payments/wallet';
 import { runMigrations, closePool } from './db/queries';
@@ -20,6 +20,7 @@ import { contractAnalyzerHandler } from './services/sub-agents/contract-analyzer
 import { codeReviewerHandler } from './services/sub-agents/code-reviewer';
 import { researchSynthHandler } from './services/sub-agents/research-synth';
 import { registryHandler } from './discovery/registry';
+import { agentCardHandler } from './discovery/agent-card';
 import { healthHandler } from './discovery/health';
 import { PRICING } from './config/pricing';
 
@@ -36,71 +37,25 @@ app.use(rateLimitByAgent);
 // --- Discovery / utility (no paywall) ---
 app.get('/health', healthHandler);
 app.get('/.well-known/agent-services', registryHandler);
+app.get('/.well-known/agent.json', agentCardHandler);
 
 // --- x402 Paywalled Routes ---
-// Each route has its paywall middleware + revenue tracking + handler.
-// Lazily initialized to allow environment variables to load first.
+// A single paymentMiddleware instance (from x402-bazaar-config.ts) covers all routes.
 
 function mountPaywalledRoutes(): void {
-  const pw = getPaywalls();
+  const paywall = getPaywall();
 
   // Data API
-  app.get(
-    '/api/v1/sentiment/:ticker',
-    pw.sentiment,
-    trackRevenue('/api/v1/sentiment', PRICING.SENTIMENT),
-    sentimentHandler
-  );
-
-  app.get(
-    '/api/v1/company/:domain',
-    pw.company,
-    trackRevenue('/api/v1/company', PRICING.COMPANY),
-    companyHandler
-  );
-
-  app.get(
-    '/api/v1/enrich/email/:email',
-    pw.enrich,
-    trackRevenue('/api/v1/enrich/email', PRICING.ENRICH),
-    enrichHandler
-  );
-
-  app.get(
-    '/api/v1/news/summary',
-    pw.news,
-    trackRevenue('/api/v1/news/summary', PRICING.NEWS),
-    newsHandler
-  );
-
-  app.post(
-    '/api/v1/extract',
-    pw.extract,
-    trackRevenue('/api/v1/extract', PRICING.EXTRACT),
-    extractHandler
-  );
+  app.get('/api/v1/sentiment/:ticker', paywall, trackRevenue('/api/v1/sentiment', PRICING.SENTIMENT), sentimentHandler);
+  app.get('/api/v1/company/:domain', paywall, trackRevenue('/api/v1/company', PRICING.COMPANY), companyHandler);
+  app.get('/api/v1/enrich/email/:email', paywall, trackRevenue('/api/v1/enrich/email', PRICING.ENRICH), enrichHandler);
+  app.get('/api/v1/news/summary', paywall, trackRevenue('/api/v1/news/summary', PRICING.NEWS), newsHandler);
+  app.post('/api/v1/extract', paywall, trackRevenue('/api/v1/extract', PRICING.EXTRACT), extractHandler);
 
   // Sub-agent services
-  app.post(
-    '/api/v1/agents/contract',
-    pw.contractAnalyzer,
-    trackRevenue('/api/v1/agents/contract', PRICING.CONTRACT_ANALYZER),
-    contractAnalyzerHandler
-  );
-
-  app.post(
-    '/api/v1/agents/code-review',
-    pw.codeReviewer,
-    trackRevenue('/api/v1/agents/code-review', PRICING.CODE_REVIEWER),
-    codeReviewerHandler
-  );
-
-  app.post(
-    '/api/v1/agents/research',
-    pw.researchSynth,
-    trackRevenue('/api/v1/agents/research', PRICING.RESEARCH_SYNTH),
-    researchSynthHandler
-  );
+  app.post('/api/v1/analyze/contract', paywall, trackRevenue('/api/v1/analyze/contract', PRICING.CONTRACT_ANALYZER), contractAnalyzerHandler);
+  app.post('/api/v1/review/code', paywall, trackRevenue('/api/v1/review/code', PRICING.CODE_REVIEWER), codeReviewerHandler);
+  app.post('/api/v1/research', paywall, trackRevenue('/api/v1/research', PRICING.RESEARCH_SYNTH), researchSynthHandler);
 }
 
 // --- Error handler ---
