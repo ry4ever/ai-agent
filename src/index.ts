@@ -58,19 +58,6 @@ function mountPaywalledRoutes(): void {
   app.post('/api/v1/research', paywall, trackRevenue('/api/v1/research', PRICING.RESEARCH_SYNTH), researchSynthHandler);
 }
 
-// --- Error handler ---
-app.use(
-  (
-    err: Error,
-    _req: express.Request,
-    res: express.Response,
-    _next: express.NextFunction
-  ) => {
-    logger.error('Unhandled error', { err: err.message, stack: err.stack });
-    res.status(500).json({ error: 'Internal server error' });
-  }
-);
-
 // --- Startup ---
 async function start(): Promise<void> {
   try {
@@ -88,6 +75,19 @@ async function start(): Promise<void> {
 
     // Mount all paywalled routes
     mountPaywalledRoutes();
+
+    // Error handler must be registered AFTER all routes to catch their errors
+    app.use(
+      (
+        err: Error,
+        _req: express.Request,
+        res: express.Response,
+        _next: express.NextFunction
+      ) => {
+        logger.error('Unhandled error', { err: err.message, stack: err.stack });
+        res.status(500).json({ error: 'Internal server error' });
+      }
+    );
 
     app.listen(PORT, () => {
       logger.info(`Server listening on port ${PORT}`, {

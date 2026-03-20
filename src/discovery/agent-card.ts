@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { PRICING, microToUSD } from '../config/pricing';
 
 export function agentCardHandler(_req: Request, res: Response): void {
   const walletAddress = process.env.WALLET_ADDRESS ?? '0xYOUR_WALLET_ADDRESS';
@@ -161,14 +162,14 @@ export function agentCardHandler(_req: Request, res: Response): void {
       payTo: walletAddress,
       facilitator: process.env.X402_FACILITATOR_URL ?? 'https://x402.org/facilitator',
       pricing: {
-        sentiment_analysis: { price: '$0.002', amountRaw: '2000', endpoint: 'GET /api/v1/sentiment/:ticker' },
-        company_enrichment: { price: '$0.005', amountRaw: '5000', endpoint: 'GET /api/v1/company/:domain' },
-        email_enrichment: { price: '$0.008', amountRaw: '8000', endpoint: 'GET /api/v1/enrich/email/:email' },
-        news_summarizer: { price: '$0.003', amountRaw: '3000', endpoint: 'GET /api/v1/news/summary?q=:topic' },
-        web_data_extractor: { price: '$0.004', amountRaw: '4000', endpoint: 'POST /api/v1/extract' },
-        contract_analyzer: { price: '$0.05', amountRaw: '50000', endpoint: 'POST /api/v1/analyze/contract' },
-        code_reviewer: { price: '$0.02', amountRaw: '20000', endpoint: 'POST /api/v1/review/code' },
-        research_synthesizer: { price: '$0.10', amountRaw: '100000', endpoint: 'POST /api/v1/research' },
+        sentiment_analysis:    { price: `$${microToUSD(PRICING.SENTIMENT)}`,          amountRaw: PRICING.SENTIMENT,          endpoint: 'GET /api/v1/sentiment/:ticker' },
+        company_enrichment:    { price: `$${microToUSD(PRICING.COMPANY)}`,            amountRaw: PRICING.COMPANY,            endpoint: 'GET /api/v1/company/:domain' },
+        email_enrichment:      { price: `$${microToUSD(PRICING.ENRICH)}`,             amountRaw: PRICING.ENRICH,             endpoint: 'GET /api/v1/enrich/email/:email' },
+        news_summarizer:       { price: `$${microToUSD(PRICING.NEWS)}`,               amountRaw: PRICING.NEWS,               endpoint: 'GET /api/v1/news/summary?q=:topic' },
+        web_data_extractor:    { price: `$${microToUSD(PRICING.EXTRACT)}`,            amountRaw: PRICING.EXTRACT,            endpoint: 'POST /api/v1/extract' },
+        contract_analyzer:     { price: `$${microToUSD(PRICING.CONTRACT_ANALYZER)}`,  amountRaw: PRICING.CONTRACT_ANALYZER,  endpoint: 'POST /api/v1/analyze/contract' },
+        code_reviewer:         { price: `$${microToUSD(PRICING.CODE_REVIEWER)}`,      amountRaw: PRICING.CODE_REVIEWER,      endpoint: 'POST /api/v1/review/code' },
+        research_synthesizer:  { price: `$${microToUSD(PRICING.RESEARCH_SYNTH)}`,     amountRaw: PRICING.RESEARCH_SYNTH,     endpoint: 'POST /api/v1/research' },
       },
       bazaarDiscovery: 'https://api.cdp.coinbase.com/platform/v2/x402/discovery/resources',
       serviceDiscovery: `${process.env.PROVIDER_URL ?? 'https://aiscale.pro'}/.well-known/agent-services`,

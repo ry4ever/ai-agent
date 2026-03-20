@@ -268,7 +268,7 @@ async function callTool(
         break;
       }
       case 'analyze_contract': {
-        const resp = await http.post('/api/v1/agents/contract', {
+        const resp = await http.post('/api/v1/analyze/contract', {
           url: args.url,
           text: args.text,
           filename: args.filename,
@@ -277,7 +277,7 @@ async function callTool(
         break;
       }
       case 'review_code': {
-        const resp = await http.post('/api/v1/agents/code-review', {
+        const resp = await http.post('/api/v1/review/code', {
           code: args.code,
           language: args.language,
           filename: args.filename,
@@ -287,7 +287,7 @@ async function callTool(
         break;
       }
       case 'synthesize_research': {
-        const resp = await http.post('/api/v1/agents/research', {
+        const resp = await http.post('/api/v1/research', {
           question: args.question,
           depth: args.depth ?? 'standard',
         });
