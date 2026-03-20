@@ -42,14 +42,39 @@ export async function extractHandler(req: Request, res: Response): Promise<void>
     let resolvedUrl = url ?? 'inline';
 
     if (url && !rawHtml) {
-      const resp = await axios.get(url, {
-        timeout: 10000,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; AgentBot/1.0)',
-          Accept: 'text/html',
-        },
-        maxRedirects: 3,
-      });
+      let resp;
+      try {
+        resp = await axios.get(url, {
+          timeout: 15000,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (compatible; AgentBot/1.0)',
+            Accept: 'text/html,application/xhtml+xml,*/*',
+          },
+          maxRedirects: 5,
+          // Accept any HTTP status — do not throw on 4xx/5xx from target
+          validateStatus: () => true,
+        });
+      } catch (fetchErr: unknown) {
+        const code = (fetchErr as NodeJS.ErrnoException).code ?? 'UNKNOWN';
+        logger.error('Failed to fetch URL', { url, code, fetchErr });
+        res.status(502).json({
+          error: 'Failed to fetch URL',
+          reason: code,
+          url,
+        });
+        return;
+      }
+
+      if (resp.status >= 400) {
+        logger.warn('Target URL returned error status', { url, status: resp.status });
+        res.status(502).json({
+          error: 'Target URL returned an error',
+          targetStatus: resp.status,
+          url,
+        });
+        return;
+      }
+
       html = resp.data as string;
       resolvedUrl = url;
     }
@@ -58,7 +83,7 @@ export async function extractHandler(req: Request, res: Response): Promise<void>
     res.json(result);
   } catch (err) {
     logger.error('Extraction failed', { url, err });
-    res.status(502).json({ error: 'Failed to extract data', url });
+    res.status(500).json({ error: 'Internal extraction error', url });
   }
 }
 

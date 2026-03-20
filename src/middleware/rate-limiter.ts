@@ -24,17 +24,17 @@ export function initRateLimiter(): void {
     rateLimiter = new RateLimiterRedis({
       storeClient: redisClient,
       keyPrefix: 'rl_agent',
-      points: 100,        // 100 requests
-      duration: 60,       // per 60 seconds
-      blockDuration: 120, // block for 2 minutes if exceeded
+      points: 1000,      // 1000 requests
+      duration: 60,      // per 60 seconds
+      blockDuration: 10, // block for 10 seconds if exceeded
     });
     logger.info('Rate limiter initialized with Redis backend');
   } else {
     rateLimiter = new RateLimiterMemory({
       keyPrefix: 'rl_agent',
-      points: 100,
+      points: 1000,
       duration: 60,
-      blockDuration: 120,
+      blockDuration: 10,
     });
     logger.warn('Rate limiter initialized with in-memory backend (Redis unavailable)');
   }
@@ -58,12 +58,13 @@ export function rateLimitByAgent(req: Request, res: Response, next: NextFunction
     .then(() => {
       next();
     })
-    .catch(() => {
-      logger.warn('Rate limit exceeded', { key, path: req.path });
+    .catch((rlRejected) => {
+      const retryAfter = Math.ceil((rlRejected?.msBeforeNext ?? 10000) / 1000);
+      logger.warn('Rate limit exceeded', { key, path: req.path, retryAfter });
       res.status(429).json({
         error: 'Rate limit exceeded',
         message: 'Too many requests. Please slow down.',
-        retryAfter: 60,
+        retryAfter,
       });
     });
 }
