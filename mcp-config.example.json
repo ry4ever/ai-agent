@@ -1,0 +1,15 @@
+{
+  "_comment": "Add this to your Claude Desktop config at ~/Library/Application Support/Claude/claude_desktop_config.json (macOS) or %APPDATA%\\Claude\\claude_desktop_config.json (Windows). See: https://modelcontextprotocol.io/quickstart/user",
+  "mcpServers": {
+    "agent-services-platform": {
+      "command": "npx",
+      "args": ["ts-node", "/path/to/agent-services-platform/src/mcp/server.ts"],
+      "env": {
+        "PLATFORM_URL": "http://localhost:3000",
+        "MCP_AGENT_ADDRESS": "0xYourWalletAddress",
+        "MCP_PAYMENT_HEADER": "",
+        "ANTHROPIC_API_KEY": "your_key_here"
+      }
+    }
+  }
+}

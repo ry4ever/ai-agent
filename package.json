@@ -1,0 +1,54 @@
+{
+  "name": "agent-services-platform",
+  "version": "1.0.0",
+  "description": "Crypto-native micropayment platform for AI agent services via x402 protocol on Base L2",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "dev:watch": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "db:migrate": "ts-node src/db/migrate.ts",
+    "lint": "eslint src --ext .ts",
+    "typecheck": "tsc --noEmit",
+    "seed": "ts-node scripts/seed-transactions.ts",
+    "mcp": "ts-node src/mcp/server.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@coinbase/coinbase-sdk": "^0.15.0",
+    "@modelcontextprotocol/sdk": "^1.10.0",
+    "@x402/core": "^0.5.0",
+    "@x402/evm": "^0.5.0",
+    "@x402/express": "^0.5.0",
+    "@x402/extensions": "^0.5.0",
+    "axios": "^1.7.0",
+    "cheerio": "^1.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.0",
+    "ethers": "^6.13.0",
+    "express": "^4.19.0",
+    "express-rate-limit": "^7.4.0",
+    "helmet": "^8.0.0",
+    "ioredis": "^5.4.0",
+    "pg": "^8.13.0",
+    "rate-limiter-flexible": "^5.0.0",
+    "uuid": "^10.0.0",
+    "winston": "^3.14.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/cheerio": "^0.22.35",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.11.0",
+    "@types/uuid": "^10.0.0",
+    "ts-node": "^10.9.0",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.6.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

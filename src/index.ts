@@ -1,0 +1,160 @@
+import 'dotenv/config';
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import { requestLogger, logger } from './middleware/logger';
+import { initRateLimiter, rateLimitByAgent } from './middleware/rate-limiter';
+import { getPaywalls } from './middleware/x402-paywall';
+import { trackRevenue } from './payments/revenue-tracker';
+import { initWallet } from './payments/wallet';
+import { runMigrations, closePool } from './db/queries';
+import { closeRedis } from './utils/redis';
+
+// Route handlers
+import { sentimentHandler } from './services/data-api/sentiment';
+import { companyHandler } from './services/data-api/company';
+import { enrichHandler } from './services/data-api/enrich';
+import { newsHandler } from './services/data-api/news';
+import { extractHandler } from './services/data-api/extract';
+import { contractAnalyzerHandler } from './services/sub-agents/contract-analyzer';
+import { codeReviewerHandler } from './services/sub-agents/code-reviewer';
+import { researchSynthHandler } from './services/sub-agents/research-synth';
+import { registryHandler } from './discovery/registry';
+import { healthHandler } from './discovery/health';
+import { PRICING } from './config/pricing';
+
+const app = express();
+const PORT = parseInt(process.env.PORT ?? '3000', 10);
+
+// --- Core middleware ---
+app.use(helmet());
+app.use(cors({ origin: '*', methods: ['GET', 'POST', 'OPTIONS'] }));
+app.use(express.json({ limit: '10mb' }));
+app.use(requestLogger);
+app.use(rateLimitByAgent);
+
+// --- Discovery / utility (no paywall) ---
+app.get('/health', healthHandler);
+app.get('/.well-known/agent-services', registryHandler);
+
+// --- x402 Paywalled Routes ---
+// Each route has its paywall middleware + revenue tracking + handler.
+// Lazily initialized to allow environment variables to load first.
+
+function mountPaywalledRoutes(): void {
+  const pw = getPaywalls();
+
+  // Data API
+  app.get(
+    '/api/v1/sentiment/:ticker',
+    pw.sentiment,
+    trackRevenue('/api/v1/sentiment', PRICING.SENTIMENT),
+    sentimentHandler
+  );
+
+  app.get(
+    '/api/v1/company/:domain',
+    pw.company,
+    trackRevenue('/api/v1/company', PRICING.COMPANY),
+    companyHandler
+  );
+
+  app.get(
+    '/api/v1/enrich/email/:email',
+    pw.enrich,
+    trackRevenue('/api/v1/enrich/email', PRICING.ENRICH),
+    enrichHandler
+  );
+
+  app.get(
+    '/api/v1/news/summary',
+    pw.news,
+    trackRevenue('/api/v1/news/summary', PRICING.NEWS),
+    newsHandler
+  );
+
+  app.post(
+    '/api/v1/extract',
+    pw.extract,
+    trackRevenue('/api/v1/extract', PRICING.EXTRACT),
+    extractHandler
+  );
+
+  // Sub-agent services
+  app.post(
+    '/api/v1/agents/contract',
+    pw.contractAnalyzer,
+    trackRevenue('/api/v1/agents/contract', PRICING.CONTRACT_ANALYZER),
+    contractAnalyzerHandler
+  );
+
+  app.post(
+    '/api/v1/agents/code-review',
+    pw.codeReviewer,
+    trackRevenue('/api/v1/agents/code-review', PRICING.CODE_REVIEWER),
+    codeReviewerHandler
+  );
+
+  app.post(
+    '/api/v1/agents/research',
+    pw.researchSynth,
+    trackRevenue('/api/v1/agents/research', PRICING.RESEARCH_SYNTH),
+    researchSynthHandler
+  );
+}
+
+// --- Error handler ---
+app.use(
+  (
+    err: Error,
+    _req: express.Request,
+    res: express.Response,
+    _next: express.NextFunction
+  ) => {
+    logger.error('Unhandled error', { err: err.message, stack: err.stack });
+    res.status(500).json({ error: 'Internal server error' });
+  }
+);
+
+// --- Startup ---
+async function start(): Promise<void> {
+  try {
+    logger.info('Starting Agent Services Platform...');
+
+    // Run DB migrations
+    await runMigrations();
+    logger.info('Database migrations complete');
+
+    // Initialize wallet management
+    await initWallet();
+
+    // Initialize rate limiter
+    initRateLimiter();
+
+    // Mount all paywalled routes
+    mountPaywalledRoutes();
+
+    app.listen(PORT, () => {
+      logger.info(`Server listening on port ${PORT}`, {
+        network: process.env.NETWORK ?? 'base-sepolia',
+        wallet: process.env.WALLET_ADDRESS ?? 'NOT SET',
+        env: process.env.NODE_ENV ?? 'development',
+      });
+    });
+  } catch (err) {
+    logger.error('Startup failed', { err });
+    process.exit(1);
+  }
+}
+
+// --- Graceful shutdown ---
+async function shutdown(signal: string): Promise<void> {
+  logger.info(`${signal} received — shutting down gracefully`);
+  await Promise.all([closePool(), closeRedis()]);
+  process.exit(0);
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+
+start();
