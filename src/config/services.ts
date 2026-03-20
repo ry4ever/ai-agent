@@ -106,7 +106,7 @@ export const SERVICE_DEFINITIONS: ServiceDefinition[] = [
     sla: { avgLatencyMs: 3000, uptime: '99.0%' },
   },
   {
-    endpoint: '/api/v1/agents/contract',
+    endpoint: '/api/v1/analyze/contract',
     method: 'POST',
     description: 'Contract analyzer: accepts PDF URL or raw text, returns structured risk analysis, key terms, red flags, and plain-English summary.',
     priceUSDC: microToUSD(PRICING.CONTRACT_ANALYZER),
@@ -122,7 +122,7 @@ export const SERVICE_DEFINITIONS: ServiceDefinition[] = [
     sla: { avgLatencyMs: 15000, uptime: '99.0%' },
   },
   {
-    endpoint: '/api/v1/agents/code-review',
+    endpoint: '/api/v1/review/code',
     method: 'POST',
     description: 'Code reviewer: accepts code diff or file content, returns security vulnerabilities, code smells, and optimization suggestions.',
     priceUSDC: microToUSD(PRICING.CODE_REVIEWER),
@@ -138,7 +138,7 @@ export const SERVICE_DEFINITIONS: ServiceDefinition[] = [
     sla: { avgLatencyMs: 10000, uptime: '99.0%' },
   },
   {
-    endpoint: '/api/v1/agents/research',
+    endpoint: '/api/v1/research',
     method: 'POST',
     description: 'Research synthesizer: accepts a question, searches multiple sources, returns a structured brief with citations.',
     priceUSDC: microToUSD(PRICING.RESEARCH_SYNTH),

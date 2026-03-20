@@ -11,9 +11,18 @@
 // ============================================================
 import { declareDiscoveryExtension } from '@x402/extensions/bazaar';
 import type { RouteConfig } from '@x402/core/server';
+import { PRICING, microToUSD } from './pricing';
 
-// ── Shared constants ──
-const NETWORK = 'eip155:8453'; // Base mainnet
+// ── Network: resolved at runtime from NETWORK env var ──
+// CAIP-2 format: eip155:<chainId>
+const NETWORK_MAP: Record<string, string> = {
+  'base-mainnet': 'eip155:8453',
+  'base-sepolia': 'eip155:84532',
+};
+
+function getNetwork(): string {
+  return NETWORK_MAP[process.env.NETWORK ?? 'base-sepolia'] ?? 'eip155:84532';
+}
 
 function getPayTo(): string {
   return process.env.WALLET_ADDRESS ?? '';
@@ -21,7 +30,7 @@ function getPayTo(): string {
 
 // ── Helper ──
 interface DiscoveryRouteConfig {
-  price: string;
+  pricingKey: keyof typeof PRICING;
   description: string;
   input: {
     method: string;
@@ -39,8 +48,9 @@ function buildRouteConfig(config: DiscoveryRouteConfig): RouteConfig {
     accepts: [
       {
         scheme: 'exact',
-        price: config.price,
-        network: NETWORK,
+        // Price derived from pricing.ts — single source of truth
+        price: `$${microToUSD(PRICING[config.pricingKey])}`,
+        network: getNetwork(),
         payTo: getPayTo,
       },
     ],
@@ -68,7 +78,7 @@ function buildRouteConfig(config: DiscoveryRouteConfig): RouteConfig {
 export const routeConfigs: Record<string, RouteConfig> = {
   // ── DATA API ENDPOINTS ──
   'GET /api/v1/sentiment/:ticker': buildRouteConfig({
-    price: '$0.002',
+    pricingKey: 'SENTIMENT',
     description:
       'AiScale Sentiment: Real-time sentiment analysis for a stock ticker. Returns score (-1 to 1), mention volume, source breakdown, and trend direction.',
     input: {
@@ -91,7 +101,7 @@ export const routeConfigs: Record<string, RouteConfig> = {
   }),
 
   'GET /api/v1/company/:domain': buildRouteConfig({
-    price: '$0.005',
+    pricingKey: 'COMPANY',
     description:
       'AiScale Company Enrichment: Returns company name, industry, employee count, funding, tech stack, social links, and key executives for any domain.',
     input: {
@@ -119,7 +129,7 @@ export const routeConfigs: Record<string, RouteConfig> = {
   }),
 
   'GET /api/v1/enrich/email/:email': buildRouteConfig({
-    price: '$0.008',
+    pricingKey: 'ENRICH',
     description:
       'AiScale Contact Enrichment: Given an email, returns full name, company, title, LinkedIn URL, and social profiles.',
     input: {
@@ -143,7 +153,7 @@ export const routeConfigs: Record<string, RouteConfig> = {
   }),
 
   'GET /api/v1/news/summary': buildRouteConfig({
-    price: '$0.003',
+    pricingKey: 'NEWS',
     description:
       'AiScale News Summary: Summarizes recent news for a topic. Returns structured summaries with source, date, relevance score, and key takeaways.',
     input: {
@@ -174,7 +184,7 @@ export const routeConfigs: Record<string, RouteConfig> = {
   }),
 
   'POST /api/v1/extract': buildRouteConfig({
-    price: '$0.004',
+    pricingKey: 'EXTRACT',
     description:
       'AiScale Data Extractor: Extracts structured data from a URL or raw HTML. Returns entities, facts, tables, and metadata as clean JSON.',
     input: {
@@ -203,7 +213,7 @@ export const routeConfigs: Record<string, RouteConfig> = {
 
   // ── SUB-AGENT ENDPOINTS ──
   'POST /api/v1/analyze/contract': buildRouteConfig({
-    price: '$0.05',
+    pricingKey: 'CONTRACT_ANALYZER',
     description:
       'AiScale Contract Analyzer: Analyzes legal contracts/documents. Returns risk analysis, key terms, obligations, deadlines, red flags, and plain-English summary.',
     input: {
@@ -228,7 +238,7 @@ export const routeConfigs: Record<string, RouteConfig> = {
   }),
 
   'POST /api/v1/review/code': buildRouteConfig({
-    price: '$0.02',
+    pricingKey: 'CODE_REVIEWER',
     description:
       'AiScale Code Reviewer: Reviews code for security vulnerabilities, bugs, code smells, and optimizations. Supports Python, JS, TS, Go, Rust, Solidity.',
     input: {
@@ -260,7 +270,7 @@ export const routeConfigs: Record<string, RouteConfig> = {
   }),
 
   'POST /api/v1/research': buildRouteConfig({
-    price: '$0.10',
+    pricingKey: 'RESEARCH_SYNTH',
     description:
       'AiScale Research Synthesizer: Deep research on any topic. Searches multiple sources and returns structured brief with findings, evidence, citations, and confidence scores.',
     input: {
