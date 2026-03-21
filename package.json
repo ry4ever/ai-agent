@@ -12,7 +12,9 @@
     "lint": "eslint src --ext .ts",
     "typecheck": "tsc --noEmit",
     "seed": "ts-node src/scripts/seed-transactions.ts",
-    "mcp": "ts-node src/mcp/server.ts"
+    "mcp": "ts-node src/mcp/server.ts",
+    "contra": "ts-node src/contra-agent.ts",
+    "contra:dry": "ts-node src/contra-agent.ts --dry-run"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
@@ -34,6 +36,7 @@
     "helmet": "^8.0.0",
     "ioredis": "^5.4.0",
     "pg": "^8.13.0",
+    "playwright": "^1.58.2",
     "rate-limiter-flexible": "^5.0.0",
     "uuid": "^10.0.0",
     "winston": "^3.14.0",
