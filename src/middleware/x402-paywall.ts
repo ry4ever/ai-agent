@@ -1,6 +1,7 @@
 import { paymentMiddleware } from '@x402/express';
 import { x402ResourceServer, HTTPFacilitatorClient } from '@x402/core/server';
 import type { PaywallProvider, PaywallConfig } from '@x402/core/server';
+import { createFacilitatorConfig } from '@coinbase/x402';
 import { ExactEvmScheme } from '@x402/evm/exact/server';
 import { bazaarResourceServerExtension } from '@x402/extensions/bazaar';
 import type { RequestHandler } from 'express';
@@ -63,12 +64,14 @@ let _resourceServer: x402ResourceServer | null = null;
 export function getResourceServer(): x402ResourceServer {
   if (_resourceServer) return _resourceServer;
 
-  const defaultFacilitatorUrl = process.env.NETWORK === 'base-mainnet'
-    ? 'https://api.cdp.coinbase.com/platform/v2/x402/facilitator'
-    : 'https://x402.org/facilitator';
-  const facilitatorUrl = process.env.X402_FACILITATOR_URL ?? defaultFacilitatorUrl;
+  // For mainnet use the CDP facilitator with JWT auth (CDP_API_KEY_ID + CDP_API_KEY_SECRET).
+  // For testnet use x402.org which requires no auth and supports Base Sepolia.
+  const isMainnet = process.env.NETWORK === 'base-mainnet';
+  const facilitatorConfig = isMainnet
+    ? createFacilitatorConfig(process.env.CDP_API_KEY_ID, process.env.CDP_API_KEY_SECRET)
+    : { url: process.env.X402_FACILITATOR_URL ?? 'https://x402.org/facilitator' };
 
-  const facilitatorClient = new HTTPFacilitatorClient({ url: facilitatorUrl });
+  const facilitatorClient = new HTTPFacilitatorClient(facilitatorConfig);
 
   _resourceServer = new x402ResourceServer(facilitatorClient)
     .register('eip155:84532', new ExactEvmScheme())  // Base Sepolia (testnet)
@@ -76,7 +79,10 @@ export function getResourceServer(): x402ResourceServer {
 
   _resourceServer.registerExtension(bazaarResourceServerExtension);
 
-  logger.info('x402 resource server initialized', { facilitator: facilitatorUrl });
+  logger.info('x402 resource server initialized', {
+    facilitator: facilitatorConfig.url,
+    network: process.env.NETWORK ?? 'base-sepolia',
+  });
 
   return _resourceServer;
 }
