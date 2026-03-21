@@ -8,6 +8,11 @@ import type { RequestHandler } from 'express';
 import { routeConfigs } from '../config/x402-bazaar-config';
 import { logger } from './logger';
 
+// Railway and many platforms store PEM keys with literal \n instead of real newlines.
+// Normalise once at module load so all consumers (including @coinbase/x402 internals
+// that fall back to process.env) see the correct key format.
+process.env.CDP_API_KEY_SECRET = process.env.CDP_API_KEY_SECRET?.replace(/\\n/g, '\n') || '';
+
 /**
  * Custom paywall provider that fixes the x402 library's display bug:
  * the library's getDisplayAmount checks for `amount` but the V1 type
@@ -67,6 +72,7 @@ export function getResourceServer(): x402ResourceServer {
   // For mainnet use the CDP facilitator with JWT auth (CDP_API_KEY_ID + CDP_API_KEY_SECRET).
   // For testnet use x402.org which requires no auth and supports Base Sepolia.
   const isMainnet = process.env.NETWORK === 'base-mainnet';
+
   const facilitatorConfig = isMainnet
     ? createFacilitatorConfig(process.env.CDP_API_KEY_ID, process.env.CDP_API_KEY_SECRET)
     : { url: process.env.X402_FACILITATOR_URL ?? 'https://x402.org/facilitator' };
