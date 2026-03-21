@@ -23,6 +23,7 @@ import { registryHandler } from './discovery/registry';
 import { agentCardHandler } from './discovery/agent-card';
 import { healthHandler } from './discovery/health';
 import { PRICING } from './config/pricing';
+import { contraRouter } from './routes/contra';
 
 const app = express();
 const PORT = parseInt(process.env.PORT ?? '3000', 10);
@@ -39,6 +40,9 @@ app.get('/health', healthHandler);
 app.get('/.well-known/agent-services', registryHandler);
 app.get('/.well-known/agent.json', agentCardHandler);
 app.get('/.well-known/agent-card.json', agentCardHandler);
+
+// --- Contra.com Job Search & Apply (no paywall — uses Contra Pro credentials) ---
+app.use('/api/v1/contra', contraRouter);
 
 // --- x402 Paywalled Routes ---
 // A single paymentMiddleware instance (from x402-bazaar-config.ts) covers all routes.
@@ -106,7 +110,8 @@ async function start(): Promise<void> {
 // --- Graceful shutdown ---
 async function shutdown(signal: string): Promise<void> {
   logger.info(`${signal} received — shutting down gracefully`);
-  await Promise.all([closePool(), closeRedis()]);
+  const { closeBrowser } = await import('./services/contra/browser');
+  await Promise.all([closePool(), closeRedis(), closeBrowser()]);
   process.exit(0);
 }
 

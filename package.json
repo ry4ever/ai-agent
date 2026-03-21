@@ -12,7 +12,9 @@
     "lint": "eslint src --ext .ts",
     "typecheck": "tsc --noEmit",
     "seed": "ts-node src/scripts/seed-transactions.ts",
-    "mcp": "ts-node src/mcp/server.ts"
+    "mcp": "ts-node src/mcp/server.ts",
+    "test": "playwright test",
+    "contra-agent": "ts-node src/contra-agent.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
@@ -34,12 +36,14 @@
     "helmet": "^8.0.0",
     "ioredis": "^5.4.0",
     "pg": "^8.13.0",
+    "playwright": "^1.58.2",
     "rate-limiter-flexible": "^5.0.0",
     "uuid": "^10.0.0",
     "winston": "^3.14.0",
     "zod": "^3.23.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@types/cheerio": "^0.22.35",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
