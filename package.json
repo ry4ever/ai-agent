@@ -1,0 +1,37 @@
+{
+  "name": "contra-jobs",
+  "version": "1.0.0",
+  "description": "Autonomous Contra.com job search & apply app powered by GLM-5 (Zhipu AI)",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "dev:watch": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "contra": "ts-node src/contra-agent.ts",
+    "contra:dry": "ts-node src/contra-agent.ts --dry-run",
+    "typecheck": "tsc --noEmit",
+    "playwright:install": "playwright install chromium"
+  },
+  "dependencies": {
+    "axios": "^1.7.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.0",
+    "express": "^4.19.0",
+    "helmet": "^8.0.0",
+    "playwright": "^1.44.0",
+    "winston": "^3.14.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "ts-node": "^10.9.0",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.6.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
