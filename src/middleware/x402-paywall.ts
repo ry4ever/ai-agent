@@ -63,7 +63,10 @@ let _resourceServer: x402ResourceServer | null = null;
 export function getResourceServer(): x402ResourceServer {
   if (_resourceServer) return _resourceServer;
 
-  const facilitatorUrl = process.env.X402_FACILITATOR_URL ?? 'https://x402.org/facilitator';
+  const defaultFacilitatorUrl = process.env.NETWORK === 'base-mainnet'
+    ? 'https://api.cdp.coinbase.com/platform/v2/x402/facilitator'
+    : 'https://x402.org/facilitator';
+  const facilitatorUrl = process.env.X402_FACILITATOR_URL ?? defaultFacilitatorUrl;
 
   const facilitatorClient = new HTTPFacilitatorClient({ url: facilitatorUrl });
 
