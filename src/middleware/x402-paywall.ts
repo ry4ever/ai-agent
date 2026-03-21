@@ -25,7 +25,23 @@ import { logger } from './logger';
 // Railway and many platforms store PEM keys with literal \n instead of real newlines.
 // Normalise once at module load so all consumers (including @coinbase/x402 internals
 // that fall back to process.env) see the correct key format.
-process.env.CDP_API_KEY_SECRET = process.env.CDP_API_KEY_SECRET?.replace(/\\n/g, '\n') || '';
+// Use (|| '') form rather than optional chaining to guarantee a string is always assigned.
+process.env.CDP_API_KEY_SECRET = (process.env.CDP_API_KEY_SECRET || '').replace(/\\n/g, '\n');
+
+// Debug: log key format AFTER normalisation to confirm the replace worked.
+{
+  const key = process.env.CDP_API_KEY_SECRET;
+  console.log('KEY_DEBUG_AFTER:', {
+    length: key.length,
+    first50: key.substring(0, 50),
+    last20: key.substring(Math.max(0, key.length - 20)),
+    hasLiteralBackslashN: key.includes('\\n'),
+    hasRealNewlines: key.includes('\n'),
+    lineCount: key.split('\n').length,
+    isPkcs8Header: key.includes('-----BEGIN PRIVATE KEY-----'),
+    isEcHeader: key.includes('-----BEGIN EC PRIVATE KEY-----'),
+  });
+}
 
 /**
  * Custom paywall provider that fixes the x402 library's display bug:
