@@ -8,6 +8,20 @@ import type { RequestHandler } from 'express';
 import { routeConfigs } from '../config/x402-bazaar-config';
 import { logger } from './logger';
 
+// Debug: log key format before any normalisation so we can see exactly what Railway passes.
+{
+  const key = process.env.CDP_API_KEY_SECRET || '';
+  console.log('KEY_DEBUG:', {
+    length: key.length,
+    first50: key.substring(0, 50),
+    last20: key.substring(Math.max(0, key.length - 20)),
+    hasLiteralBackslashN: key.includes('\\n'),   // two chars: \ n
+    hasRealNewlines: key.includes('\n'),           // one char: 0x0A
+    lineCount: key.split('\n').length,
+    charCodes0to5: Array.from(key.substring(0, 5)).map(c => c.charCodeAt(0)),
+  });
+}
+
 // Railway and many platforms store PEM keys with literal \n instead of real newlines.
 // Normalise once at module load so all consumers (including @coinbase/x402 internals
 // that fall back to process.env) see the correct key format.
