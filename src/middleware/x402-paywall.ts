@@ -7,40 +7,18 @@ import { bazaarResourceServerExtension } from '@x402/extensions/bazaar';
 import type { RequestHandler } from 'express';
 import { routeConfigs } from '../config/x402-bazaar-config';
 import { logger } from './logger';
+import { sec1ToP256Pkcs8Pem } from '../utils/pem';
 
-// Debug: log key format before any normalisation so we can see exactly what Railway passes.
+// Normalise CDP_API_KEY_SECRET once at module load:
+//   1. Replace literal \n (Railway env var storage) with real newlines
+//   2. Convert SEC1 PEM (BEGIN EC PRIVATE KEY) → PKCS#8 (BEGIN PRIVATE KEY)
+//      because jose v6 / importPKCS8 rejects SEC1 format
 {
-  const key = process.env.CDP_API_KEY_SECRET || '';
-  console.log('KEY_DEBUG:', {
-    length: key.length,
-    first50: key.substring(0, 50),
-    last20: key.substring(Math.max(0, key.length - 20)),
-    hasLiteralBackslashN: key.includes('\\n'),   // two chars: \ n
-    hasRealNewlines: key.includes('\n'),           // one char: 0x0A
-    lineCount: key.split('\n').length,
-    charCodes0to5: Array.from(key.substring(0, 5)).map(c => c.charCodeAt(0)),
-  });
-}
-
-// Railway and many platforms store PEM keys with literal \n instead of real newlines.
-// Normalise once at module load so all consumers (including @coinbase/x402 internals
-// that fall back to process.env) see the correct key format.
-// Use (|| '') form rather than optional chaining to guarantee a string is always assigned.
-process.env.CDP_API_KEY_SECRET = (process.env.CDP_API_KEY_SECRET || '').replace(/\\n/g, '\n');
-
-// Debug: log key format AFTER normalisation to confirm the replace worked.
-{
-  const key = process.env.CDP_API_KEY_SECRET;
-  console.log('KEY_DEBUG_AFTER:', {
-    length: key.length,
-    first50: key.substring(0, 50),
-    last20: key.substring(Math.max(0, key.length - 20)),
-    hasLiteralBackslashN: key.includes('\\n'),
-    hasRealNewlines: key.includes('\n'),
-    lineCount: key.split('\n').length,
-    isPkcs8Header: key.includes('-----BEGIN PRIVATE KEY-----'),
-    isEcHeader: key.includes('-----BEGIN EC PRIVATE KEY-----'),
-  });
+  let key = (process.env.CDP_API_KEY_SECRET || '').replace(/\\n/g, '\n');
+  if (key.includes('-----BEGIN EC PRIVATE KEY-----')) {
+    key = sec1ToP256Pkcs8Pem(key);
+  }
+  process.env.CDP_API_KEY_SECRET = key;
 }
 
 /**
