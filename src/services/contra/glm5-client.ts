@@ -18,7 +18,7 @@ import { logger } from '../../middleware/logger';
 
 const GLM5_API_BASE =
   process.env.GLM5_API_BASE ?? 'https://open.bigmodel.cn/api/paas/v4';
-const GLM5_MODEL = process.env.GLM5_MODEL ?? 'glm-4';
+const GLM5_MODEL = process.env.GLM5_MODEL ?? 'glm-4-air';
 
 interface GLM5Message {
   role: 'system' | 'user' | 'assistant';

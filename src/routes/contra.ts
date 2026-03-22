@@ -56,10 +56,15 @@ const AutoApplySchema = z.object({
 // Helper to check if Contra credentials are configured
 // ---------------------------------------------------------------------------
 function checkContraConfig(res: Response): boolean {
-  if (!process.env.CONTRA_EMAIL || !process.env.CONTRA_PASSWORD) {
+  // Allow either Contra credentials OR Browserbase/CDP mode
+  const hasContraCreds = !!(process.env.CONTRA_EMAIL && process.env.CONTRA_PASSWORD);
+  const hasBrowserbase = !!(process.env.BROWSERBASE_API_KEY && process.env.BROWSERBASE_PROJECT_ID);
+  const cdpMode = process.env.CONTRA_EMAIL === 'cdp-user';
+  
+  if (!hasContraCreds && !hasBrowserbase && !cdpMode) {
     res.status(503).json({
       error: 'Contra credentials not configured',
-      details: 'Set CONTRA_EMAIL and CONTRA_PASSWORD environment variables',
+      details: 'Set CONTRA_EMAIL and CONTRA_PASSWORD, or BROWSERBASE_API_KEY and BROWSERBASE_PROJECT_ID',
     });
     return false;
   }
@@ -142,7 +147,7 @@ contraRouter.post('/search', async (req: Request, res: Response) => {
 contraRouter.get('/jobs/:id', async (req: Request, res: Response) => {
   if (!checkContraConfig(res)) return;
 
-  const jobId = req.params.id;
+  const jobId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   if (!jobId) {
     res.status(400).json({ error: 'Job ID is required' });
     return;
