@@ -77,13 +77,9 @@ let _resourceServer: x402ResourceServer | null = null;
 export function getResourceServer(): x402ResourceServer {
   if (_resourceServer) return _resourceServer;
 
-  // For mainnet use the CDP facilitator with JWT auth (CDP_API_KEY_ID + CDP_API_KEY_SECRET).
-  // For testnet use x402.org which requires no auth and supports Base Sepolia.
-  const isMainnet = process.env.NETWORK === 'base-mainnet';
-
-  const facilitatorConfig = isMainnet
-    ? createFacilitatorConfig(process.env.CDP_API_KEY_ID, process.env.CDP_API_KEY_SECRET)
-    : { url: process.env.X402_FACILITATOR_URL ?? 'https://x402.org/facilitator' };
+  // Always use the CDP facilitator (supports both mainnet and Sepolia).
+  // CDP enables payment auto-tracking, x402 Bazaar listing, and the full x402 protocol flow.
+  const facilitatorConfig = createFacilitatorConfig(process.env.CDP_API_KEY_ID, process.env.CDP_API_KEY_SECRET);
 
   const facilitatorClient = new HTTPFacilitatorClient(facilitatorConfig);
 
