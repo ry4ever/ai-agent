@@ -8,6 +8,7 @@ import type { RequestHandler } from 'express';
 import { routeConfigs } from '../config/x402-bazaar-config';
 import { logger } from './logger';
 import { sec1ToP256Pkcs8Pem } from '../utils/pem';
+import type { RouteConfig } from '@x402/core/server';
 
 // Normalise CDP_API_KEY_SECRET once at module load:
 //   1. Replace literal \n (Railway env var storage) with real newlines
@@ -97,6 +98,30 @@ export function getResourceServer(): x402ResourceServer {
   return _resourceServer;
 }
 
+// --- Route configs: inject CDP facilitator URL into every accepts entry ---
+//
+// The CDP facilitator expects `extra.facilitatorUrl` in the payment requirements
+// it receives during verify/settle so it can auto-register the resource in the
+// x402 Bazaar and route payments correctly. Without it, the requirements the
+// server forwards to CDP lack the context needed for Bazaar listing.
+
+const CDP_FACILITATOR_URL = 'https://api.cdp.coinbase.com/platform/v2/x402';
+
+function withFacilitatorUrl(configs: Record<string, RouteConfig>): Record<string, RouteConfig> {
+  return Object.fromEntries(
+    Object.entries(configs).map(([route, config]) => {
+      const accepts = Array.isArray(config.accepts) ? config.accepts : [config.accepts];
+      return [route, {
+        ...config,
+        accepts: accepts.map(opt => ({
+          ...opt,
+          extra: { ...opt.extra, facilitatorUrl: CDP_FACILITATOR_URL },
+        })),
+      }];
+    }),
+  );
+}
+
 // --- Single paywall middleware covering all routes (from x402-bazaar-config.ts) ---
 
 let _paywall: RequestHandler | null = null;
@@ -104,7 +129,7 @@ let _paywall: RequestHandler | null = null;
 export function getPaywall(): RequestHandler {
   if (_paywall) return _paywall;
   _paywall = paymentMiddleware(
-    routeConfigs,
+    withFacilitatorUrl(routeConfigs),
     getResourceServer(),
     { appName: 'AiScale Agent Services', testnet: process.env.NETWORK !== 'base-mainnet' },
     aiscalePaywallProvider,
