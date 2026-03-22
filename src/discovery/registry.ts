@@ -9,7 +9,7 @@ export function registryHandler(_req: Request, res: Response): void {
     network: process.env.NETWORK ?? 'base-sepolia',
     payTo: process.env.WALLET_ADDRESS ?? '',
     usdcContract: process.env.USDC_CONTRACT ?? '',
-    facilitatorUrl: process.env.X402_FACILITATOR_URL ?? 'https://x402.org/facilitator',
+    facilitatorUrl: process.env.X402_FACILITATOR_URL ?? 'https://api.cdp.coinbase.com/platform/v2/x402',
     services: SERVICE_DEFINITIONS.map((svc) => ({
       endpoint: svc.endpoint,
       method: svc.method,

@@ -160,7 +160,7 @@ export function agentCardHandler(_req: Request, res: Response): void {
         },
       ],
       payTo: walletAddress,
-      facilitator: process.env.X402_FACILITATOR_URL ?? 'https://x402.org/facilitator',
+      facilitator: process.env.X402_FACILITATOR_URL ?? 'https://api.cdp.coinbase.com/platform/v2/x402',
       pricing: {
         sentiment_analysis:    { price: `$${microToUSD(PRICING.SENTIMENT)}`,          amountRaw: PRICING.SENTIMENT,          endpoint: 'GET /api/v1/sentiment/:ticker' },
         company_enrichment:    { price: `$${microToUSD(PRICING.COMPANY)}`,            amountRaw: PRICING.COMPANY,            endpoint: 'GET /api/v1/company/:domain' },
