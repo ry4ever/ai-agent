@@ -4,3 +4,5 @@ dist/
 contra-session.json
 *.log
 .DS_Store
+test-results/
+playwright-report/
