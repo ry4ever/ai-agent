@@ -1,12 +1,6 @@
 node_modules/
 dist/
 .env
+contra-session.json
 *.log
 .DS_Store
-coverage/
-.nyc_output/
-*.pem
-*.key
-test-results/
-playwright-report/
-contra-session.json

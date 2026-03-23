@@ -20,15 +20,26 @@ const DASHBOARD_PATTERN = /contra\.com\/(home|dashboard|feed|opportunities)/;
 
 /**
  * Check if the current page/session is authenticated.
+ * For CDP connections, just checks if we can navigate without being redirected to login.
  */
 export async function isLoggedIn(page: Page): Promise<boolean> {
   try {
+    const currentUrl = page.url();
+    
+    // If already on contra.com and not on login page, assume logged in
+    if (currentUrl.includes('contra.com') && !currentUrl.includes('/login') && !currentUrl.includes('/signup')) {
+      return true;
+    }
+    
+    // Try to navigate to opportunities
     await page.goto(`${CONTRA_BASE}/opportunities`, {
       waitUntil: 'domcontentloaded',
       timeout: 15000,
     });
+    
+    const newUrl = page.url();
     // If redirected to login, we're not authenticated
-    return !page.url().includes('/login') && !page.url().includes('/signup');
+    return !newUrl.includes('/login') && !newUrl.includes('/signup');
   } catch {
     return false;
   }
@@ -89,11 +100,17 @@ export async function login(): Promise<Page> {
 
 /**
  * Ensure a page is authenticated, re-logging in if needed.
+ * For CDP connections, assumes the existing session is valid.
  */
 export async function ensureLoggedIn(): Promise<Page> {
   const page = await getPage();
   const loggedIn = await isLoggedIn(page);
   if (!loggedIn) {
+    // For CDP connections, we can't login programmatically with Google OAuth
+    // The user needs to be logged in in their browser
+    if (process.env.CHROME_CDP_URL || process.env.CONTRA_EMAIL === 'cdp-user') {
+      throw new Error('Not logged in to Contra. Please log in via Google OAuth in your Chrome browser (CDP window) and try again.');
+    }
     await page.close();
     return login();
   }
