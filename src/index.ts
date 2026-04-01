@@ -22,6 +22,7 @@ import { researchSynthHandler } from './services/sub-agents/research-synth';
 import { registryHandler } from './discovery/registry';
 import { agentCardHandler } from './discovery/agent-card';
 import { healthHandler } from './discovery/health';
+import { landingHandler } from './discovery/landing';
 import { PRICING } from './config/pricing';
 
 const app = express();
@@ -35,6 +36,7 @@ app.use(requestLogger);
 app.use(rateLimitByAgent);
 
 // --- Discovery / utility (no paywall) ---
+app.get('/', landingHandler);
 app.get('/health', healthHandler);
 app.get('/.well-known/agent-services', registryHandler);
 app.get('/.well-known/agent.json', agentCardHandler);
