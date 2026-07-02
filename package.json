@@ -4,20 +4,20 @@
   "description": "Crypto-native micropayment platform for AI agent services via x402 protocol on Base L2",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc && cp -r src/db/migrations dist/db/",
+    "build": "tsc && node -e \"require('fs').cpSync('src/db/migrations','dist/db/migrations',{recursive:true})\"",
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
     "dev:watch": "ts-node-dev --respawn --transpile-only src/index.ts",
     "db:migrate": "ts-node src/db/migrate.ts",
-    "lint": "eslint src --ext .ts",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "seed": "ts-node src/scripts/seed-transactions.ts",
     "mcp": "ts-node src/mcp/server.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
     "@coinbase/cdp-sdk": "^1.45.0",
-    "@coinbase/coinbase-sdk": "^0.15.0",
     "@coinbase/x402": "^2.1.0",
     "@modelcontextprotocol/sdk": "^1.10.0",
     "@x402/core": "^2.7.0",
@@ -30,9 +30,9 @@
     "dotenv": "^16.4.0",
     "ethers": "^6.13.0",
     "express": "^4.19.0",
-    "express-rate-limit": "^7.4.0",
     "helmet": "^8.0.0",
     "ioredis": "^5.4.0",
+    "pdf-parse": "^1.1.1",
     "pg": "^8.13.0",
     "rate-limiter-flexible": "^5.0.0",
     "uuid": "^10.0.0",
@@ -40,7 +40,6 @@
     "zod": "^3.23.0"
   },
   "devDependencies": {
-    "@types/cheerio": "^0.22.35",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/node": "^22.0.0",
@@ -48,7 +47,8 @@
     "@types/uuid": "^10.0.0",
     "ts-node": "^10.9.0",
     "ts-node-dev": "^2.0.0",
-    "typescript": "^5.6.0"
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
   },
   "engines": {
     "node": ">=20.0.0"

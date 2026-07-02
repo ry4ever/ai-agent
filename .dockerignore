@@ -1,0 +1,13 @@
+node_modules
+dist
+.git
+.env
+*.log
+.DS_Store
+coverage
+.nyc_output
+*.pem
+*.key
+docker-compose.yml
+scripts/
+tests/

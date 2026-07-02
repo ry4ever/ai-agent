@@ -2,24 +2,28 @@ import { Redis } from 'ioredis';
 import { logger } from '../middleware/logger';
 
 let redisClient: Redis | null = null;
-let connectionFailed = false;
 
 export function getRedisClient(): Redis | null {
-  if (connectionFailed) return null;
   if (redisClient) return redisClient;
 
   try {
     redisClient = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', {
       enableOfflineQueue: false,
       retryStrategy: (times) => {
-        if (times > 3) {
-          connectionFailed = true;
-          logger.warn('Redis connection failed after retries — caching disabled');
-          return null;
+        if (times > 10) {
+          logger.warn('Redis retry limit reached — backing off for 30s');
+          return 30_000;
         }
         return Math.min(times * 200, 2000);
       },
-      reconnectOnError: () => false,
+      maxRetriesPerRequest: 3,
+      reconnectOnError: (err) => {
+        const targetErrors = ['READONLY', 'ETIMEDOUT', 'ECONNRESET'];
+        if (targetErrors.some((e) => err.message.includes(e))) {
+          return 2;
+        }
+        return false;
+      },
     });
 
     redisClient.on('error', (err) => {
@@ -28,12 +32,15 @@ export function getRedisClient(): Redis | null {
 
     redisClient.on('connect', () => {
       logger.info('Redis connected');
-      connectionFailed = false;
+    });
+
+    redisClient.on('reconnecting', (delay: number) => {
+      logger.info('Redis reconnecting', { delayMs: delay });
     });
 
     return redisClient;
   } catch {
-    connectionFailed = true;
+    logger.warn('Redis client creation failed — caching disabled');
     return null;
   }
 }

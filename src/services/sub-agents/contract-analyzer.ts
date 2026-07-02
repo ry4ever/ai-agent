@@ -1,8 +1,10 @@
 import { Request, Response } from 'express';
-import axios from 'axios';
 import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 import { logger } from '../../middleware/logger';
+import { safeFetch, SsrfError } from '../../utils/ssrf-guard';
+
+const AI_TIMEOUT_MS = 30_000;
 
 const ContractRequestSchema = z.object({
   url: z.string().url().optional(),
@@ -61,7 +63,16 @@ export async function contractAnalyzerHandler(req: Request, res: Response): Prom
     let contractText = text ?? '';
 
     if (url && !text) {
-      contractText = await fetchContractText(url);
+      try {
+        contractText = await fetchContractText(url);
+      } catch (fetchErr) {
+        if (fetchErr instanceof SsrfError) {
+          logger.warn('SSRF blocked', { url, reason: fetchErr.message });
+          res.status(403).json({ error: 'URL not allowed', url });
+          return;
+        }
+        throw fetchErr;
+      }
     }
 
     if (!contractText.trim()) {
@@ -78,34 +89,30 @@ export async function contractAnalyzerHandler(req: Request, res: Response): Prom
 }
 
 async function fetchContractText(url: string): Promise<string> {
-  const resp = await axios.get(url, {
+  const resp = await safeFetch(url, {
     timeout: 15000,
     responseType: 'arraybuffer',
-    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; AgentBot/1.0)' },
   });
 
+  const buffer = Buffer.from(resp.data as ArrayBuffer);
   const contentType = (resp.headers['content-type'] as string) ?? '';
 
-  // For plain text or HTML
-  if (contentType.includes('text')) {
-    return Buffer.from(resp.data as ArrayBuffer).toString('utf-8');
+  if (contentType.includes('application/pdf') || buffer.subarray(0, 5).toString() === '%PDF-') {
+    try {
+      const pdfParse = (await import('pdf-parse')).default;
+      const pdfData = await pdfParse(buffer);
+      return pdfData.text.replace(/\s+/g, ' ').trim();
+    } catch (err) {
+      logger.warn('PDF parsing failed, falling back to raw extraction', { err });
+      return buffer.toString('utf-8').replace(/[\x00-\x1F\x7F-\xFF]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 50000);
+    }
   }
 
-  // For PDFs, convert bytes to string and extract readable text
-  // In production you'd use pdf-parse or pdfjs-dist
-  const buffer = Buffer.from(resp.data as ArrayBuffer);
-  const text = buffer.toString('utf-8');
-  // Extract text between stream markers (basic PDF text extraction)
-  const matches = text.match(/BT[\s\S]*?ET/g) ?? [];
-  return matches
-    .join(' ')
-    .replace(/[\x00-\x1F\x7F-\xFF]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim() || text.replace(/[\x00-\x1F\x7F-\xFF]/g, ' ').replace(/\s+/g, ' ').slice(0, 50000);
+  return buffer.toString('utf-8').replace(/[\x00-\x1F\x7F-\xFF]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 50000);
 }
 
 async function analyzeContract(contractText: string, apiKey: string): Promise<ContractAnalysis> {
-  const client = new Anthropic({ apiKey });
+  const client = new Anthropic({ apiKey, timeout: AI_TIMEOUT_MS });
 
   // Truncate to fit context window while keeping key parts
   const truncated = contractText.length > 80000

@@ -4,12 +4,14 @@ import { Redis } from 'ioredis';
 import { logger } from './logger';
 
 let rateLimiter: RateLimiterRedis | RateLimiterMemory;
+let redisAvailable = true;
 
 function getRedisClient(): Redis | null {
   try {
     const client = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', {
       enableOfflineQueue: false,
       lazyConnect: true,
+      maxRetriesPerRequest: 3,
     });
     return client;
   } catch {
@@ -24,30 +26,33 @@ export function initRateLimiter(): void {
     rateLimiter = new RateLimiterRedis({
       storeClient: redisClient,
       keyPrefix: 'rl_agent',
-      points: 1000,      // 1000 requests
-      duration: 60,      // per 60 seconds
-      blockDuration: 10, // block for 10 seconds if exceeded
-    });
-    logger.info('Rate limiter initialized with Redis backend');
-  } else {
-    rateLimiter = new RateLimiterMemory({
-      keyPrefix: 'rl_agent',
       points: 1000,
       duration: 60,
       blockDuration: 10,
     });
-    logger.warn('Rate limiter initialized with in-memory backend (Redis unavailable)');
+    logger.info('Rate limiter initialized with Redis backend');
+  } else {
+    fallbackToMemory();
   }
 }
 
+function fallbackToMemory(): void {
+  rateLimiter = new RateLimiterMemory({
+    keyPrefix: 'rl_agent',
+    points: 1000,
+    duration: 60,
+    blockDuration: 10,
+  });
+  redisAvailable = false;
+  logger.warn('Rate limiter using in-memory backend (Redis unavailable)');
+}
+
 export function rateLimitByAgent(req: Request, res: Response, next: NextFunction): void {
-  // Exclude health checks and well-known discovery endpoints from rate limiting
-  if (req.path === '/health' || req.path.startsWith('/.well-known/')) {
+  if (req.path === '/health' || req.path.startsWith('/.well-known/') || req.path === '/') {
     return next();
   }
 
-  // Key by agent wallet address if present, otherwise by IP
-  const key = (req.headers['x-agent-address'] as string) ?? req.ip ?? 'unknown';
+  const key = req.ip ?? 'unknown';
 
   if (!rateLimiter) {
     initRateLimiter();
@@ -59,6 +64,15 @@ export function rateLimitByAgent(req: Request, res: Response, next: NextFunction
       next();
     })
     .catch((rlRejected) => {
+      if (rlRejected instanceof Error) {
+        logger.error('Rate limiter backend error — failing open', {
+          key,
+          path: req.path,
+          error: rlRejected.message,
+        });
+        next();
+        return;
+      }
       const retryAfter = Math.ceil((rlRejected?.msBeforeNext ?? 10000) / 1000);
       logger.warn('Rate limit exceeded', { key, path: req.path, retryAfter });
       res.status(429).json({

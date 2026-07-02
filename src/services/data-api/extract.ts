@@ -1,9 +1,9 @@
 import { Request, Response } from 'express';
-import axios from 'axios';
 import * as cheerio from 'cheerio';
 import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 import { logger } from '../../middleware/logger';
+import { safeFetch, SsrfError } from '../../utils/ssrf-guard';
 
 const ExtractRequestSchema = z.object({
   url: z.string().url().optional(),
@@ -44,17 +44,22 @@ export async function extractHandler(req: Request, res: Response): Promise<void>
     if (url && !rawHtml) {
       let resp;
       try {
-        resp = await axios.get(url, {
+        resp = await safeFetch(url, {
           timeout: 15000,
+          maxRedirects: 5,
+          responseType: 'text',
           headers: {
             'User-Agent': 'Mozilla/5.0 (compatible; AgentBot/1.0)',
             Accept: 'text/html,application/xhtml+xml,*/*',
           },
-          maxRedirects: 5,
-          // Accept any HTTP status — do not throw on 4xx/5xx from target
           validateStatus: () => true,
         });
       } catch (fetchErr: unknown) {
+        if (fetchErr instanceof SsrfError) {
+          logger.warn('SSRF blocked', { url, reason: fetchErr.message });
+          res.status(403).json({ error: 'URL not allowed', url });
+          return;
+        }
         const code = (fetchErr as NodeJS.ErrnoException).code ?? 'UNKNOWN';
         logger.error('Failed to fetch URL', { url, code, fetchErr });
         res.status(502).json({
@@ -150,7 +155,7 @@ async function extractWithClaude(
   tables: Record<string, string>[][],
   wordCount: number
 ): Promise<ExtractResult> {
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 30_000 });
 
   const response = await client.messages.create({
     model: 'claude-haiku-4-5-20251001',

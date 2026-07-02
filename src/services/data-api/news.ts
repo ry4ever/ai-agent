@@ -116,7 +116,7 @@ async function buildSummaries(query: string, articles: NewsAPIArticle[]): Promis
   // Use Claude to generate better summaries if available
   if (anthropicKey && anthropicKey !== 'your_anthropic_api_key' && articles.length > 0) {
     try {
-      const client = new Anthropic({ apiKey: anthropicKey });
+      const client = new Anthropic({ apiKey: anthropicKey, timeout: 15_000 });
       const articleText = articles
         .slice(0, 5)
         .map((a, i) => `${i + 1}. ${a.title ?? ''}: ${a.description ?? ''}`)

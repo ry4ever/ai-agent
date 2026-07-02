@@ -3,6 +3,7 @@ import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { getRedisClient } from '../../utils/redis';
 import { logger } from '../../middleware/logger';
+import { validateUrl, SsrfError } from '../../utils/ssrf-guard';
 
 const CACHE_TTL = 86400; // 24 hours
 
@@ -125,6 +126,8 @@ function mapClearbitToProfile(domain: string, data: ClearbitCompany): CompanyPro
 async function scrapeCompanyWebsite(domain: string, profile: CompanyProfile): Promise<CompanyProfile> {
   try {
     const url = `https://${domain}`;
+    await validateUrl(url);
+
     const resp = await axios.get(url, {
       timeout: 10000,
       headers: {

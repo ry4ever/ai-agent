@@ -15,6 +15,31 @@ export function getPool(): Pool {
   return pool;
 }
 
+export async function checkDbHealth(): Promise<{ ok: boolean; latencyMs: number; detail?: string }> {
+  const start = Date.now();
+  try {
+    const db = getPool();
+    // Verify connectivity AND that the critical tables exist — a bare
+    // "SELECT 1" would pass even if migrations never ran (the exact
+    // scenario that hides the disconnected state).
+    const result = await db.query(
+      `SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'transactions') AS has_tx_table`
+    );
+    const hasTable = result.rows[0]?.has_tx_table === true;
+    return {
+      ok: hasTable,
+      latencyMs: Date.now() - start,
+      detail: hasTable ? undefined : 'transactions table missing — migrations may not have run',
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      latencyMs: Date.now() - start,
+      detail: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
 export async function closePool(): Promise<void> {
   if (pool) {
     await pool.end();

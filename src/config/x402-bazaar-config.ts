@@ -193,8 +193,6 @@ export const routeConfigs: Record<string, RouteConfig> = {
       body: {
         url: 'URL to extract data from (provide url OR html, not both)',
         html: 'Raw HTML string to parse (provide url OR html, not both)',
-        extractTables: 'Boolean, extract tables (default: true)',
-        extractEntities: 'Boolean, extract named entities (default: true)',
       },
     },
     output: {
@@ -220,9 +218,8 @@ export const routeConfigs: Record<string, RouteConfig> = {
       method: 'POST',
       resource: '/api/v1/analyze/contract',
       body: {
-        text: 'Contract text content (provide text OR pdfBase64)',
-        pdfBase64: 'Base64-encoded PDF (provide text OR pdfBase64)',
-        analysisDepth: "'quick' or 'full' (default: full)",
+        text: 'Contract text content (provide text OR url)',
+        url: 'URL to a text or PDF contract (provide text OR url)',
       },
     },
     output: {
@@ -248,7 +245,6 @@ export const routeConfigs: Record<string, RouteConfig> = {
         code: 'Code string to review',
         language: 'Programming language (auto-detected if omitted)',
         context: 'Optional context about what the code does',
-        focusAreas: "Array: 'security', 'performance', 'readability', 'bugs' (default: all)",
       },
     },
     output: {
@@ -278,8 +274,7 @@ export const routeConfigs: Record<string, RouteConfig> = {
       resource: '/api/v1/research',
       body: {
         question: 'Research question or topic',
-        depth: "'quick' (3-5 sources) or 'deep' (10+ sources). Default: 'quick'",
-        maxSources: 'Max sources to consult (default: 5, max: 20)',
+        depth: "'quick' (3-5 sources) or 'deep' (10+ sources). Default: 'standard'",
       },
     },
     output: {

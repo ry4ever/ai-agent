@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { getPool } from '../db/queries';
+import { checkDbHealth } from '../db/queries';
 import { getRedisClient } from '../utils/redis';
 
 const startTime = Date.now();
@@ -19,17 +19,14 @@ export async function healthHandler(_req: Request, res: Response): Promise<void>
   });
 }
 
-async function runHealthChecks(): Promise<Record<string, { status: string; latencyMs?: number }>> {
-  const results: Record<string, { status: string; latencyMs?: number }> = {};
+async function runHealthChecks(): Promise<Record<string, { status: string; latencyMs?: number; detail?: string }>> {
+  const results: Record<string, { status: string; latencyMs?: number; detail?: string }> = {};
 
-  // PostgreSQL check
-  const pgStart = Date.now();
-  try {
-    await getPool().query('SELECT 1');
-    results.postgres = { status: 'ok', latencyMs: Date.now() - pgStart };
-  } catch {
-    results.postgres = { status: 'error', latencyMs: Date.now() - pgStart };
-  }
+  // PostgreSQL check — verifies connectivity AND that the transactions table exists
+  const pgHealth = await checkDbHealth();
+  results.postgres = pgHealth.ok
+    ? { status: 'ok', latencyMs: pgHealth.latencyMs }
+    : { status: 'error', latencyMs: pgHealth.latencyMs, detail: pgHealth.detail };
 
   // Redis check
   const redisStart = Date.now();

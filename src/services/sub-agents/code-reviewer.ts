@@ -74,7 +74,7 @@ async function reviewCode(params: {
   apiKey: string;
 }): Promise<CodeReviewResult> {
   const { code, language, filename, context, apiKey } = params;
-  const client = new Anthropic({ apiKey });
+  const client = new Anthropic({ apiKey, timeout: 30_000 });
 
   const langHint = language ?? (filename ? inferLanguage(filename) : 'unknown');
   const contextNote = context ? `\nContext: ${context}` : '';

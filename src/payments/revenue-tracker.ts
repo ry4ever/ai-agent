@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { insertTransaction, upsertDailyRevenue } from '../db/queries';
-import { paymentLogger } from '../middleware/logger';
+import { paymentLogger, logger } from '../middleware/logger';
 
 // This middleware runs after a successful x402 payment verification.
 // It logs the payment to the database and updates daily revenue aggregates.
@@ -21,7 +21,9 @@ export function trackRevenue(
       ? extractTxHash(paymentHeader)
       : `local_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
-    // Non-blocking DB writes — don't slow down the response
+    // Non-blocking DB writes — don't slow down the response, but surface failures.
+    // Previously the .catch() swallowed `err` and logged a success-looking
+    // "Payment received" message, masking a disconnected database entirely.
     Promise.all([
       insertTransaction({
         tx_hash: txHash,
@@ -39,17 +41,22 @@ export function trackRevenue(
         amount_usdc: amountUSDC,
         agent_address: agentAddress,
       }),
-    ]).catch((err) => {
-      // Log but don't fail the request
-      paymentLogger({
+    ]).then(() => {
+      paymentLogger({ txHash, agentAddress, endpoint, amountUSDC });
+    }).catch((err) => {
+      // Log the actual error so the "disconnected state" is visible in logs.
+      // Don't fail the request — the user already paid and should get their response.
+      logger.error('Transaction DB write failed', {
+        event: 'payment_db_error',
         txHash,
         agentAddress,
         endpoint,
         amountUSDC,
+        error: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
       });
     });
 
-    paymentLogger({ txHash, agentAddress, endpoint, amountUSDC });
     next();
   };
 }

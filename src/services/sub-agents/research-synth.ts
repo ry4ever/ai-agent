@@ -73,7 +73,7 @@ async function synthesizeResearch(params: {
   // Gather sources from news API if available
   const sources = await gatherSources(question, depth);
 
-  const client = new Anthropic({ apiKey });
+  const client = new Anthropic({ apiKey, timeout: 45_000 });
   const sourcesContext = sources.length > 0
     ? `\n\nRelevant sources found:\n${sources.map((s, i) => `${i + 1}. ${s.title} (${s.url}): ${s.snippet}`).join('\n')}`
     : '';

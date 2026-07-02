@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
+import { Server } from 'http';
 import cors from 'cors';
 import helmet from 'helmet';
 import { requestLogger, logger } from './middleware/logger';
@@ -28,8 +29,21 @@ import { PRICING } from './config/pricing';
 const app = express();
 const PORT = parseInt(process.env.PORT ?? '3000', 10);
 
+// Trust proxy so req.ip reflects the real client IP behind Railway / load balancers
+app.set('trust proxy', 1);
+
 // --- Core middleware ---
-app.use(helmet());
+// Helmet with permissive CSP for the inline-styled landing + paywall HTML pages
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", 'data:'],
+    },
+  },
+}));
 app.use(cors({ origin: '*', methods: ['GET', 'POST', 'OPTIONS'] }));
 app.use(express.json({ limit: '10mb' }));
 app.use(requestLogger);
@@ -62,6 +76,8 @@ function mountPaywalledRoutes(): void {
 }
 
 // --- Startup ---
+let server: Server | null = null;
+
 async function start(): Promise<void> {
   try {
     logger.info('Starting Agent Services Platform...');
@@ -92,7 +108,7 @@ async function start(): Promise<void> {
       }
     );
 
-    app.listen(PORT, () => {
+    server = app.listen(PORT, () => {
       logger.info(`Server listening on port ${PORT}`, {
         network: process.env.NETWORK ?? 'base-sepolia',
         wallet: process.env.WALLET_ADDRESS ?? 'NOT SET',
@@ -106,13 +122,38 @@ async function start(): Promise<void> {
 }
 
 // --- Graceful shutdown ---
+let shuttingDown = false;
+
 async function shutdown(signal: string): Promise<void> {
+  if (shuttingDown) return;
+  shuttingDown = true;
   logger.info(`${signal} received — shutting down gracefully`);
+
+  // Stop accepting new connections and drain in-flight requests
+  if (server) {
+    await new Promise<void>((resolve) => {
+      server!.close(() => resolve());
+    });
+    logger.info('HTTP server closed — all requests drained');
+  }
+
   await Promise.all([closePool(), closeRedis()]);
   process.exit(0);
 }
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
+
+// --- Global crash handlers ---
+process.on('unhandledRejection', (reason) => {
+  logger.error('Unhandled promise rejection', { reason: String(reason) });
+});
+
+process.on('uncaughtException', (err) => {
+  logger.error('Uncaught exception', { err: err.message, stack: err.stack });
+  // Give the process a moment to flush logs, then exit — the container
+  // orchestrator (Railway / Docker / k8s) will restart it.
+  shutdown('uncaughtException');
+});
 
 start();
