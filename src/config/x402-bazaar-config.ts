@@ -44,6 +44,7 @@ interface DiscoveryRouteConfig {
 }
 
 function buildRouteConfig(config: DiscoveryRouteConfig): RouteConfig {
+  const isBody = !!config.input.body;
   return {
     accepts: [
       {
@@ -59,11 +60,10 @@ function buildRouteConfig(config: DiscoveryRouteConfig): RouteConfig {
       ...declareDiscoveryExtension({
         description: config.description,
         input: {
-          method: config.input.method,
-          resource: config.input.resource,
-          ...(config.input.params && { params: config.input.params }),
-          ...(config.input.body && { body: config.input.body }),
+          ...(config.input.params ?? {}),
+          ...(config.input.body ?? {}),
         },
+        ...(isBody ? { bodyType: 'json' as const } : {}),
         output: {
           example: config.output.example,
         },
