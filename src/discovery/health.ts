@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { checkDbHealth } from '../db/queries';
 import { getRedisClient } from '../utils/redis';
+import { getNetworkLabel } from '../config/network';
 
 const startTime = Date.now();
 
@@ -13,7 +14,7 @@ export async function healthHandler(_req: Request, res: Response): Promise<void>
     version: process.env.npm_package_version ?? '1.0.0',
     uptime: Math.floor((Date.now() - startTime) / 1000),
     environment: process.env.NODE_ENV ?? 'development',
-    network: process.env.NETWORK ?? 'base-sepolia',
+    network: getNetworkLabel(),
     checks,
     timestamp: new Date().toISOString(),
   });

@@ -9,6 +9,7 @@ import { routeConfigs } from '../config/x402-bazaar-config';
 import { logger } from './logger';
 import { sec1ToP256Pkcs8Pem } from '../utils/pem';
 import type { RouteConfig } from '@x402/core/server';
+import { FACILITATOR_URL } from '../config/network';
 
 // Normalise CDP_API_KEY_SECRET once at module load:
 //   1. Replace literal \n (Railway env var storage) with real newlines
@@ -105,7 +106,7 @@ export function getResourceServer(): x402ResourceServer {
 // x402 Bazaar and route payments correctly. Without it, the requirements the
 // server forwards to CDP lack the context needed for Bazaar listing.
 
-const CDP_FACILITATOR_URL = 'https://api.cdp.coinbase.com/platform/v2/x402';
+const CDP_FACILITATOR_URL = FACILITATOR_URL;
 
 function withFacilitatorUrl(configs: Record<string, RouteConfig>): Record<string, RouteConfig> {
   return Object.fromEntries(

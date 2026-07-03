@@ -1,10 +1,9 @@
 import { Request, Response } from 'express';
 import { PRICING, microToUSD } from '../config/pricing';
+import { isMainnet, getChainId, getUsdcContract, FACILITATOR_URL, BAZAAR_DISCOVERY_URL } from '../config/network';
 
 export function agentCardHandler(_req: Request, res: Response): void {
   const walletAddress = process.env.WALLET_ADDRESS ?? '0xYOUR_WALLET_ADDRESS';
-  const network = process.env.NETWORK ?? 'base-sepolia';
-  const isMainnet = network === 'base-mainnet';
 
   const card = {
     name: 'AiScale Agent Services',
@@ -148,19 +147,17 @@ export function agentCardHandler(_req: Request, res: Response): void {
     security: ['x402'],
     _x402_payment_info: {
       _comment: 'Non-standard metadata to help agents understand payment details upfront',
-      network: isMainnet ? 'base-mainnet' : 'base-sepolia',
-      chainId: isMainnet ? 'eip155:8453' : 'eip155:84532',
+      network: isMainnet() ? 'base-mainnet' : 'base-sepolia',
+      chainId: getChainId(),
       acceptedTokens: [
         {
           symbol: 'USDC',
-          contract: isMainnet
-            ? '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
-            : '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+          contract: getUsdcContract(),
           decimals: 6,
         },
       ],
       payTo: walletAddress,
-      facilitator: process.env.X402_FACILITATOR_URL ?? 'https://api.cdp.coinbase.com/platform/v2/x402',
+      facilitator: FACILITATOR_URL,
       pricing: {
         sentiment_analysis:    { price: `$${microToUSD(PRICING.SENTIMENT)}`,          amountRaw: PRICING.SENTIMENT,          endpoint: 'GET /api/v1/sentiment/:ticker' },
         company_enrichment:    { price: `$${microToUSD(PRICING.COMPANY)}`,            amountRaw: PRICING.COMPANY,            endpoint: 'GET /api/v1/company/:domain' },
@@ -171,7 +168,7 @@ export function agentCardHandler(_req: Request, res: Response): void {
         code_reviewer:         { price: `$${microToUSD(PRICING.CODE_REVIEWER)}`,      amountRaw: PRICING.CODE_REVIEWER,      endpoint: 'POST /api/v1/review/code' },
         research_synthesizer:  { price: `$${microToUSD(PRICING.RESEARCH_SYNTH)}`,     amountRaw: PRICING.RESEARCH_SYNTH,     endpoint: 'POST /api/v1/research' },
       },
-      bazaarDiscovery: 'https://api.cdp.coinbase.com/platform/v2/x402/discovery/resources',
+      bazaarDiscovery: BAZAAR_DISCOVERY_URL,
       serviceDiscovery: `${process.env.AGENT_URL ?? 'https://agents.aiscale.pro'}/.well-known/agent-services`,
     },
   };

@@ -12,17 +12,7 @@
 import { declareDiscoveryExtension } from '@x402/extensions/bazaar';
 import type { RouteConfig } from '@x402/core/server';
 import { PRICING, microToUSD } from './pricing';
-
-// ── Network: resolved at runtime from NETWORK env var ──
-// CAIP-2 format: eip155:<chainId>
-const NETWORK_MAP: Record<string, string> = {
-  'base-mainnet': 'eip155:8453',
-  'base-sepolia': 'eip155:84532',
-};
-
-function getNetwork(): `${string}:${string}` {
-  return (NETWORK_MAP[process.env.NETWORK ?? 'base-sepolia'] ?? 'eip155:84532') as `${string}:${string}`;
-}
+import { getChainId, FACILITATOR_URL } from './network';
 
 function getPayTo(): string {
   return process.env.WALLET_ADDRESS ?? '';
@@ -51,7 +41,7 @@ function buildRouteConfig(config: DiscoveryRouteConfig): RouteConfig {
         scheme: 'exact',
         // Price derived from pricing.ts — single source of truth
         price: `$${microToUSD(PRICING[config.pricingKey])}`,
-        network: getNetwork(),
+        network: getChainId(),
         payTo: getPayTo,
       },
     ],

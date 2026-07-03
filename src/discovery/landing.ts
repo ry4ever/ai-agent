@@ -1,8 +1,8 @@
 import { Request, Response } from 'express';
 import { SERVICE_DEFINITIONS } from '../config/services';
+import { getNetworkLabel, isMainnet, BAZAAR_DISCOVERY_URL } from '../config/network';
 
-const BAZAAR_URL = 'https://api.cdp.coinbase.com/platform/v2/x402/discovery/resources';
-const AGENT_BASE = 'https://agents.aiscale.pro';
+const AGENT_BASE = process.env.AGENT_URL ?? 'https://agents.aiscale.pro';
 
 function badge(method: string): string {
   const colour = method === 'GET' ? '#10b981' : '#6366f1';
@@ -279,7 +279,7 @@ export function landingHandler(_req: Request, res: Response): void {
     <div>
       <a href="#pricing">Pricing</a>
       <a href="#how-to-use">Docs</a>
-      <a href="${BAZAAR_URL}" target="_blank" rel="noopener">Bazaar ↗</a>
+      <a href="${BAZAAR_DISCOVERY_URL}" target="_blank" rel="noopener">Bazaar ↗</a>
     </div>
   </div>
 </nav>
@@ -289,7 +289,7 @@ export function landingHandler(_req: Request, res: Response): void {
   <section class="hero">
     <div class="hero-tag">
       <span class="dot"></span>
-      Live on Base Mainnet · x402 Protocol
+      Live on ${getNetworkLabel()} · x402 Protocol
     </div>
     <h1>AI APIs that bill<br>by the <span class="grad">single call</span></h1>
     <p class="hero-sub">
@@ -298,7 +298,7 @@ export function landingHandler(_req: Request, res: Response): void {
       No API keys. No subscriptions. Pay in USDC per request.
     </p>
     <div class="hero-actions">
-      <a class="btn btn-primary" href="${BAZAAR_URL}" target="_blank" rel="noopener">Try it on x402 Bazaar</a>
+      <a class="btn btn-primary" href="${BAZAAR_DISCOVERY_URL}" target="_blank" rel="noopener">Try it on x402 Bazaar</a>
       <a class="btn btn-outline" href="#pricing">View pricing &amp; endpoints</a>
     </div>
   </section>
@@ -359,7 +359,7 @@ export function landingHandler(_req: Request, res: Response): void {
   <!-- ── PRICING TABLE ── -->
   <section id="pricing">
     <div class="section-label">Pricing</div>
-    <h2>All prices in USDC · Base Mainnet</h2>
+    <h2>All prices in USDC · ${getNetworkLabel()}</h2>
     <p class="section-sub">Pay exactly per call. Amounts are final at request time — no hidden fees.</p>
 
     <div class="pricing-group">
@@ -415,7 +415,7 @@ curl ${AGENT_BASE}/api/v1/sentiment/AAPL
 <span class="dim"># 2. Use an x402-compatible client to attach payment automatically</span>
 npx x402-curl <span class="hi">\\
   --wallet-key $PRIVATE_KEY \\
-  --network base-mainnet \\</span>
+  --network ${isMainnet() ? 'base-mainnet' : 'base-sepolia'} \\</span>
   ${AGENT_BASE}/api/v1/sentiment/AAPL</div>
 
     <div id="tab-node" class="code-block" style="display:none"><span class="dim">// npm install @coinbase/x402-fetch</span>
@@ -423,7 +423,7 @@ npx x402-curl <span class="hi">\\
 
 <span class="hi">const</span> fetch402 = wrapFetchWithPayment(fetch, {
   privateKey: process.env.PRIVATE_KEY,
-  network: <span class="hi">'base-mainnet'</span>,
+  network: <span class="hi">'${isMainnet() ? 'base-mainnet' : 'base-sepolia'}'</span>,
 });
 
 <span class="hi">const</span> res = <span class="hi">await</span> fetch402(
@@ -437,7 +437,7 @@ console.log(data.score); <span class="dim">// e.g. 0.72 (bullish)</span></div>
 
 client = x402_httpx.Client(
     private_key=<span class="hi">os.environ["PRIVATE_KEY"]</span>,
-    network=<span class="hi">"base-mainnet"</span>,
+    network=<span class="hi">"${isMainnet() ? 'base-mainnet' : 'base-sepolia'}"</span>,
 )
 
 resp = client.get(
@@ -459,7 +459,7 @@ print(resp.json()[<span class="hi">"score"</span>])  <span class="dim"># e.g. 0.
       <h2>Ready to start?</h2>
       <p>Browse the full catalogue on the x402 Bazaar — no sign-up, no API key, first call costs fractions of a cent.</p>
       <div class="cta-actions">
-        <a class="btn btn-primary" href="${BAZAAR_URL}" target="_blank" rel="noopener">Try it on x402 Bazaar ↗</a>
+        <a class="btn btn-primary" href="${BAZAAR_DISCOVERY_URL}" target="_blank" rel="noopener">Try it on x402 Bazaar ↗</a>
         <a class="btn btn-outline" href="${AGENT_BASE}/.well-known/agent-services">View service manifest</a>
       </div>
     </div>
