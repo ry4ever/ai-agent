@@ -7,4 +7,11 @@ DROP INDEX IF EXISTS idx_tx_hash;
 DELETE FROM transactions a USING transactions b
 WHERE a.tx_hash = b.tx_hash AND a.id > b.id;
 
-ALTER TABLE transactions ADD CONSTRAINT uq_tx_hash UNIQUE (tx_hash);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'uq_tx_hash'
+    ) THEN
+        ALTER TABLE transactions ADD CONSTRAINT uq_tx_hash UNIQUE (tx_hash);
+    END IF;
+END $$;
