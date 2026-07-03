@@ -82,6 +82,19 @@ async function start(): Promise<void> {
   try {
     logger.info('Starting Agent Services Platform...');
 
+    // Pre-flight: critical env vars
+    const missing: string[] = [];
+    if (!process.env.DATABASE_URL) missing.push('DATABASE_URL');
+    if (missing.length > 0) {
+      const msg = `Missing required environment variables: ${missing.join(', ')}. ` +
+        (missing.includes('DATABASE_URL')
+          ? 'Add a PostgreSQL service on Railway and ensure DATABASE_URL is set. '
+          : '');
+      logger.error('Configuration error', { missing, detail: msg });
+      console.error(`[FATAL] ${msg}`);
+      process.exit(1);
+    }
+
     // Run DB migrations
     await runMigrations();
     logger.info('Database migrations complete');
@@ -116,7 +129,16 @@ async function start(): Promise<void> {
       });
     });
   } catch (err) {
-    logger.error('Startup failed', { err });
+    // Extract a human-readable message — winston swallows Error.message
+    // when passed as a nested { err } property, and pg AggregateError has
+    // an empty .message with the real info in .code, so flatten everything.
+    const errMsg = err instanceof Error
+      ? (err.message || (err as NodeJS.ErrnoException).code || err.constructor.name)
+      : String(err);
+    const errStack = err instanceof Error ? err.stack : undefined;
+    logger.error(`Startup failed: ${errMsg}`, { stack: errStack });
+    console.error('[FATAL] Startup failed:', errMsg);
+    if (errStack) console.error(errStack);
     process.exit(1);
   }
 }
