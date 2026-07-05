@@ -51,12 +51,37 @@ All optional. The server targets the live API by default.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PLATFORM_URL` | `https://agents.aiscale.pro` | Platform API base URL |
-| `MCP_AGENT_ADDRESS` | `0x000…0000` | Your wallet (identifies the payer) |
-| `MCP_PAYMENT_HEADER` | *(empty)* | Base64 x402 payment proof. Leave empty to explore for free — paid routes return payment instructions |
+| `MCP_PRIVATE_KEY` | *(empty)* | Wallet private key (0x...) with USDC on Base. **Set this to enable paid calls.** |
+
+With payment enabled:
+```json
+{
+  "mcpServers": {
+    "aiscale": {
+      "command": "npx",
+      "args": ["-y", "agent-services-platform"],
+      "env": {
+        "MCP_PRIVATE_KEY": "0xYOUR_PRIVATE_KEY"
+      }
+    }
+  }
+}
+```
 
 ## How payments work
 
-Without a payment header, calling a paid tool returns `402 Payment Required` with exact payment details. To make paid calls, set `MCP_PAYMENT_HEADER` to a valid x402 proof and `MCP_AGENT_ADDRESS` to your wallet. Get test USDC at the [Circle faucet](https://faucet.circle.com/) (Base Sepolia) or use real USDC on Base mainnet.
+Without `MCP_PRIVATE_KEY`, calling a paid tool returns `402 Payment Required` with payment details. To enable automatic payments:
+
+1. **Get USDC on Base** — [bridge.base.org](https://bridge.base.org) (mainnet) or [faucet.circle.com](https://faucet.circle.com/) (testnet)
+2. **Set `MCP_PRIVATE_KEY`** — each call signs a unique x402 payment automatically
+3. Your key never leaves your machine
+
+You can also use the **`aiscale-pay` CLI** for one-off calls:
+```bash
+MCP_PRIVATE_KEY=0x... aiscale-pay sentiment AAPL     # $0.002
+MCP_PRIVATE_KEY=0x... aiscale-pay company stripe.com  # $0.005
+MCP_PRIVATE_KEY=0x... aiscale-pay research "State of AI" --depth deep  # $0.15
+```
 
 ## Links
 

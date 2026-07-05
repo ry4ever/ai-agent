@@ -278,6 +278,7 @@ export function landingHandler(_req: Request, res: Response): void {
     <span class="logo">Ai<span>Scale</span> Agent Services</span>
     <div>
       <a href="#pricing">Pricing</a>
+      <a href="#get-usdc">Get Started</a>
       <a href="#how-to-use">Docs</a>
       <a href="${BAZAAR_DISCOVERY_URL}" target="_blank" rel="noopener">Bazaar ↗</a>
     </div>
@@ -397,36 +398,103 @@ export function landingHandler(_req: Request, res: Response): void {
     </div>
   </section>
 
+  <!-- ── GETTING USDC ── -->
+  <section id="get-usdc">
+    <div class="section-label">Before you start</div>
+    <h2>Get USDC on Base</h2>
+    <p class="section-sub">You need USDC in a wallet on Base to pay for API calls. Each call costs $0.002–$0.15.</p>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <h3>Create or use a wallet</h3>
+        <p>Any EVM wallet works — MetaMask, Coinbase Wallet, etc. Export the private key (starts with <code>0x</code>).</p>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <h3>Get USDC on Base</h3>
+        <p>
+          <strong>Mainnet:</strong> Bridge USDC to Base at
+          <a href="https://bridge.base.org" target="_blank" rel="noopener">bridge.base.org</a><br>
+          <strong>Testnet:</strong> Free test USDC at
+          <a href="https://faucet.circle.com/" target="_blank" rel="noopener">faucet.circle.com</a>
+        </p>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <h3>Set your private key</h3>
+        <p>Set <code>MCP_PRIVATE_KEY</code> to your wallet's private key. Payments are signed per-request — your key never leaves your machine.</p>
+      </div>
+    </div>
+  </section>
+
   <!-- ── HOW TO USE ── -->
   <section id="how-to-use">
     <div class="section-label">Quick start</div>
-    <h2>Three ways to integrate</h2>
-    <p class="section-sub">Pick the integration that fits your stack.</p>
+    <h2>Four ways to integrate</h2>
+    <p class="section-sub">Pick the integration that fits your stack. All handle x402 payments automatically.</p>
 
     <div class="code-tabs">
-      <button class="tab-btn active" onclick="show('curl')">curl</button>
+      <button class="tab-btn active" onclick="show('mcp')">MCP (Claude / Cursor)</button>
+      <button class="tab-btn" onclick="show('cli')">CLI</button>
       <button class="tab-btn" onclick="show('node')">Node.js</button>
       <button class="tab-btn" onclick="show('python')">Python</button>
+      <button class="tab-btn" onclick="show('curl')">curl</button>
     </div>
 
-    <div id="tab-curl" class="code-block"><span class="dim"># 1. Make the initial call — you'll receive a 402 with payment details</span>
-curl ${AGENT_BASE}/api/v1/sentiment/AAPL
+    <div id="tab-mcp" class="code-block"><span class="dim"># 1. Install the MCP server</span>
+npm install -g agent-services-platform
 
-<span class="dim"># 2. Use an x402-compatible client to attach payment automatically</span>
-npx x402-curl <span class="hi">\\
-  --wallet-key $PRIVATE_KEY \\
-  --network ${isMainnet() ? 'base-mainnet' : 'base-sepolia'} \\</span>
-  ${AGENT_BASE}/api/v1/sentiment/AAPL</div>
+<span class="dim"># 2. Add to your MCP client config:</span>
 
-    <div id="tab-node" class="code-block" style="display:none"><span class="dim">// npm install @coinbase/x402-fetch</span>
-<span class="hi">import</span> { wrapFetchWithPayment } <span class="hi">from</span> '@coinbase/x402-fetch';
+<span class="dim"># Claude Desktop — ~/Library/Application Support/Claude/claude_desktop_config.json</span>
+<span class="dim"># Cursor — ~/.cursor/mcp.json</span>
+{
+  "mcpServers": {
+    "aiscale": {
+      "command": "aiscale-mcp",
+      <span class="hi">"env": {
+        "MCP_PRIVATE_KEY": "0xYOUR_PRIVATE_KEY"
+      }</span>
+    }
+  }
+}
 
-<span class="hi">const</span> fetch402 = wrapFetchWithPayment(fetch, {
-  privateKey: process.env.PRIVATE_KEY,
-  network: <span class="hi">'${isMainnet() ? 'base-mainnet' : 'base-sepolia'}'</span>,
-});
+<span class="dim"># 3. Restart Claude/Cursor, then just ask:</span>
+<span class="dim"># "What's the sentiment for AAPL?"</span>
+<span class="dim"># "Analyze this contract for risks..."</span>
+<span class="dim"># "Review my code for security issues"</span></div>
 
-<span class="hi">const</span> res = <span class="hi">await</span> fetch402(
+    <div id="tab-cli" class="code-block" style="display:none"><span class="dim"># Install globally (or use npx)</span>
+npm install -g agent-services-platform
+
+<span class="dim"># Set your wallet key</span>
+<span class="hi">export MCP_PRIVATE_KEY=0xYOUR_PRIVATE_KEY</span>
+
+<span class="dim"># Make paid API calls from terminal</span>
+aiscale-pay sentiment AAPL            <span class="dim"># $0.002</span>
+aiscale-pay company stripe.com        <span class="dim"># $0.005</span>
+aiscale-pay news "AI agents"          <span class="dim"># $0.003</span>
+aiscale-pay enrich john@stripe.com    <span class="dim"># $0.008</span>
+aiscale-pay extract --url example.com <span class="dim"># $0.004</span>
+aiscale-pay research "Quantum state"  <span class="dim"># $0.15</span>
+aiscale-pay code --file ./src/app.ts  <span class="dim"># $0.05</span>
+aiscale-pay contract --url contract.pdf <span class="dim"># $0.10</span>
+
+<span class="dim"># Without MCP_PRIVATE_KEY, you'll see payment details (free to explore)</span></div>
+
+    <div id="tab-node" class="code-block" style="display:none"><span class="dim">// npm install @x402/fetch @x402/evm @x402/core viem</span>
+<span class="hi">import</span> { wrapFetchWithPayment } <span class="hi">from</span> '@x402/fetch';
+<span class="hi">import</span> { x402Client } <span class="hi">from</span> '@x402/core/client';
+<span class="hi">import</span> { registerExactEvmScheme } <span class="hi">from</span> '@x402/evm/exact/client';
+<span class="hi">import</span> { privateKeyToAccount } <span class="hi">from</span> 'viem/accounts';
+
+<span class="hi">const</span> account = privateKeyToAccount(process.env.PRIVATE_KEY);
+<span class="hi">const</span> client = <span class="hi">new</span> x402Client();
+registerExactEvmScheme(client, { signer: account });
+
+<span class="hi">const</span> fetchWithPay = wrapFetchWithPayment(fetch, client);
+
+<span class="hi">const</span> res = <span class="hi">await</span> fetchWithPay(
   <span class="hi">'${AGENT_BASE}/api/v1/sentiment/AAPL'</span>
 );
 <span class="hi">const</span> data = <span class="hi">await</span> res.json();
@@ -444,6 +512,14 @@ resp = client.get(
     <span class="hi">"${AGENT_BASE}/api/v1/sentiment/AAPL"</span>
 )
 print(resp.json()[<span class="hi">"score"</span>])  <span class="dim"># e.g. 0.72</span></div>
+
+    <div id="tab-curl" class="code-block" style="display:none"><span class="dim"># 1. Call without payment to see pricing</span>
+curl ${AGENT_BASE}/api/v1/sentiment/AAPL
+
+<span class="dim"># Response includes payment-required header with amount, payTo, and network</span>
+
+<span class="dim"># 2. Use the CLI to handle payment automatically</span>
+MCP_PRIVATE_KEY=0x... aiscale-pay sentiment AAPL</div>
 
     <p style="margin-top:1rem;font-size:.85rem;color:var(--muted)">
       Full endpoint reference at
@@ -472,11 +548,12 @@ print(resp.json()[<span class="hi">"score"</span>])  <span class="dim"># e.g. 0.
 
 <script>
   function show(tab) {
-    ['curl','node','python'].forEach(t => {
-      document.getElementById('tab-' + t).style.display = t === tab ? 'block' : 'none';
+    ['mcp','cli','node','python','curl'].forEach(t => {
+      const el = document.getElementById('tab-' + t);
+      if (el) el.style.display = t === tab ? 'block' : 'none';
     });
     document.querySelectorAll('.tab-btn').forEach((b, i) => {
-      b.classList.toggle('active', ['curl','node','python'][i] === tab);
+      b.classList.toggle('active', ['mcp','cli','node','python','curl'][i] === tab);
     });
   }
 </script>

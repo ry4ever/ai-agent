@@ -10,10 +10,15 @@
  * Architecture:
  *   MCP Client (Claude, Cursor, VS Code, ...)
  *     → MCP tools (this file, run over stdio)
- *       → HTTP calls to the platform (with x402 payment header if configured)
+ *       → HTTP calls to the platform (with x402 payment auto-generated per call)
  *         → paywalled API endpoints
  *
  * Runs against the live production API by default. Override with PLATFORM_URL.
+ *
+ * Payment:
+ *   Set MCP_PRIVATE_KEY to a wallet private key with USDC on Base.
+ *   The server automatically constructs x402 payments for each paid request.
+ *   Without a key, paid endpoints return 402 with payment instructions.
  *
  * Usage:
  *   npx agent-services-platform          # after npm publish
@@ -29,24 +34,66 @@ import {
   ListToolsRequestSchema,
   Tool,
 } from '@modelcontextprotocol/sdk/types.js';
-import axios, { AxiosInstance } from 'axios';
 
-// Defaults to the live production API so the server works out-of-the-box for
-// anyone who installs it. Override with PLATFORM_URL to point elsewhere
-// (e.g. http://localhost:3000 for local development).
 const PLATFORM_URL = process.env.PLATFORM_URL ?? 'https://agents.aiscale.pro';
-const PAYMENT_HEADER = process.env.MCP_PAYMENT_HEADER ?? '';
+const PRIVATE_KEY = process.env.MCP_PRIVATE_KEY ?? '';
 const AGENT_ADDRESS = process.env.MCP_AGENT_ADDRESS ?? '0x0000000000000000000000000000000000000000';
 
-const http: AxiosInstance = axios.create({
-  baseURL: PLATFORM_URL,
-  timeout: 30000,
-  headers: {
-    'Content-Type': 'application/json',
-    'x-agent-address': AGENT_ADDRESS,
-    ...(PAYMENT_HEADER ? { 'X-PAYMENT': PAYMENT_HEADER } : {}),
-  },
-});
+// ---------------------------------------------------------------------------
+// HTTP client: auto-payment when MCP_PRIVATE_KEY is set
+// ---------------------------------------------------------------------------
+
+type FetchLike = typeof fetch;
+let httpClient: FetchLike = fetch;
+
+async function setupPaymentClient(): Promise<string | null> {
+  if (!PRIVATE_KEY) return null;
+  const { wrapFetchWithPayment } = await import('@x402/fetch');
+  const { x402Client } = await import('@x402/core/client');
+  const { registerExactEvmScheme } = await import('@x402/evm/exact/client');
+  const { privateKeyToAccount } = await import('viem/accounts');
+
+  const account = privateKeyToAccount(PRIVATE_KEY as `0x${string}`);
+  const client = new x402Client();
+  registerExactEvmScheme(client, { signer: account });
+  httpClient = wrapFetchWithPayment(fetch, client);
+  return account.address;
+}
+
+async function apiGet(path: string, params?: Record<string, string>): Promise<unknown> {
+  const url = new URL(`${PLATFORM_URL}${path}`);
+  if (params) {
+    for (const [k, v] of Object.entries(params)) {
+      if (v !== undefined && v !== null) url.searchParams.set(k, v);
+    }
+  }
+  const res = await httpClient(url.toString(), {
+    headers: { 'x-agent-address': AGENT_ADDRESS },
+  });
+  return handleResponse(res);
+}
+
+async function apiPost(path: string, body: Record<string, unknown>): Promise<unknown> {
+  const res = await httpClient(`${PLATFORM_URL}${path}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-agent-address': AGENT_ADDRESS,
+    },
+    body: JSON.stringify(body),
+  });
+  return handleResponse(res);
+}
+
+async function handleResponse(res: Response): Promise<unknown> {
+  if (!res.ok) {
+    const text = await res.text();
+    let data: unknown = text;
+    try { data = JSON.parse(text); } catch { /* keep as text */ }
+    throw { status: res.status, data, message: `HTTP ${res.status}` };
+  }
+  return res.json();
+}
 
 // ---------------------------------------------------------------------------
 // Tool definitions
@@ -58,7 +105,7 @@ const TOOLS: Tool[] = [
     description:
       'Get real-time sentiment score (-1 to 1) for a stock ticker from news and social data. ' +
       'Returns score, bullish/bearish/neutral label, article volume, and source count. ' +
-      `Costs $0.002 USDC per call (paid automatically if X-PAYMENT is configured).`,
+      `Costs $0.002 USDC per call (paid automatically if MCP_PRIVATE_KEY is set).`,
     inputSchema: {
       type: 'object' as const,
       properties: {
@@ -245,65 +292,54 @@ async function callTool(
 
     switch (name) {
       case 'get_sentiment': {
-        const resp = await http.get(`/api/v1/sentiment/${encodeURIComponent(String(args.ticker))}`);
-        response = resp.data;
+        response = await apiGet(`/api/v1/sentiment/${encodeURIComponent(String(args.ticker))}`);
         break;
       }
       case 'get_company_profile': {
-        const resp = await http.get(`/api/v1/company/${encodeURIComponent(String(args.domain))}`);
-        response = resp.data;
+        response = await apiGet(`/api/v1/company/${encodeURIComponent(String(args.domain))}`);
         break;
       }
       case 'enrich_email': {
-        const resp = await http.get(`/api/v1/enrich/email/${encodeURIComponent(String(args.email))}`);
-        response = resp.data;
+        response = await apiGet(`/api/v1/enrich/email/${encodeURIComponent(String(args.email))}`);
         break;
       }
       case 'get_news_summary': {
-        const resp = await http.get('/api/v1/news/summary', {
-          params: { q: args.query },
-        });
-        response = resp.data;
+        response = await apiGet('/api/v1/news/summary', { q: String(args.query) });
         break;
       }
       case 'extract_structured_data': {
-        const resp = await http.post('/api/v1/extract', {
+        response = await apiPost('/api/v1/extract', {
           url: args.url,
           html: args.html,
         });
-        response = resp.data;
         break;
       }
       case 'analyze_contract': {
-        const resp = await http.post('/api/v1/analyze/contract', {
+        response = await apiPost('/api/v1/analyze/contract', {
           url: args.url,
           text: args.text,
           filename: args.filename,
         });
-        response = resp.data;
         break;
       }
       case 'review_code': {
-        const resp = await http.post('/api/v1/review/code', {
+        response = await apiPost('/api/v1/review/code', {
           code: args.code,
           language: args.language,
           filename: args.filename,
           context: args.context,
         });
-        response = resp.data;
         break;
       }
       case 'synthesize_research': {
-        const resp = await http.post('/api/v1/research', {
+        response = await apiPost('/api/v1/research', {
           question: args.question,
           depth: args.depth ?? 'standard',
         });
-        response = resp.data;
         break;
       }
       case 'list_services': {
-        const resp = await http.get('/.well-known/agent-services');
-        response = resp.data;
+        response = await apiGet('/.well-known/agent-services');
         break;
       }
       default:
@@ -316,10 +352,10 @@ async function callTool(
       content: [{ type: 'text', text: JSON.stringify(response, null, 2) }],
     };
   } catch (err) {
-    const axErr = err as { response?: { status: number; data: unknown }; message: string };
+    const e = err as { status?: number; data?: unknown; message: string };
 
-    if (axErr.response?.status === 402) {
-      const paymentInfo = axErr.response.data;
+    if (e.status === 402) {
+      const paymentInfo = e.data;
       return {
         content: [
           {
@@ -330,8 +366,11 @@ async function callTool(
               `Payment details:`,
               JSON.stringify(paymentInfo, null, 2),
               ``,
-              `To pay automatically, set MCP_PAYMENT_HEADER in your .env with a valid x402 payment proof.`,
-              `You can get test USDC at https://faucet.circle.com/ (Base Sepolia network).`,
+              `To pay automatically, set MCP_PRIVATE_KEY in your MCP config to a wallet`,
+              `private key with USDC on Base.`,
+              ``,
+              `Get test USDC: https://faucet.circle.com/ (Base Sepolia)`,
+              `Buy USDC on Base: https://bridge.base.org`,
             ].join('\n'),
           },
         ],
@@ -342,7 +381,7 @@ async function callTool(
       content: [
         {
           type: 'text',
-          text: `Error calling ${name}: ${axErr.response?.status ?? 'network error'} — ${axErr.message}`,
+          text: `Error calling ${name}: ${e.status ?? 'network error'} — ${e.message}`,
         },
       ],
     };
@@ -354,6 +393,8 @@ async function callTool(
 // ---------------------------------------------------------------------------
 
 async function main(): Promise<void> {
+  const walletAddress = await setupPaymentClient();
+
   const server = new Server(
     {
       name: 'agent-services-platform',
@@ -382,6 +423,7 @@ async function main(): Promise<void> {
   process.stderr.write(
     `[MCP] Agent Services Platform server started\n` +
       `[MCP] Platform URL: ${PLATFORM_URL}\n` +
+      `[MCP] Payment: ${walletAddress ? `enabled (wallet: ${walletAddress})` : 'disabled (set MCP_PRIVATE_KEY to enable)'}\n` +
       `[MCP] Tools available: ${TOOLS.map((t) => t.name).join(', ')}\n`
   );
 }

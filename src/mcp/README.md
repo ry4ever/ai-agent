@@ -78,8 +78,8 @@ All settings are optional environment variables:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PLATFORM_URL` | `https://agents.aiscale.pro` | The platform API base URL |
-| `MCP_AGENT_ADDRESS` | `0x000…0000` | Your wallet address (identifies you as the payer) |
-| `MCP_PAYMENT_HEADER` | *(empty)* | Base64 x402 payment proof. **Leave empty to explore for free** (paid routes return payment instructions instead of results) |
+| `MCP_PRIVATE_KEY` | *(empty)* | Wallet private key (0x...) with USDC on Base. **Set this to enable paid calls.** |
+| `MCP_AGENT_ADDRESS` | `0x000…0000` | Your wallet address (identifies the payer) |
 
 Example with payment configured:
 ```json
@@ -89,8 +89,7 @@ Example with payment configured:
       "command": "npx",
       "args": ["-y", "agent-services-platform"],
       "env": {
-        "MCP_AGENT_ADDRESS": "0xYourWalletAddress",
-        "MCP_PAYMENT_HEADER": "<base64 x402 payment proof>"
+        "MCP_PRIVATE_KEY": "0xYOUR_PRIVATE_KEY"
       }
     }
   }
@@ -113,7 +112,17 @@ Example with payment configured:
 
 ## How payments work
 
-Without a payment header, calling a paid tool returns a `402 Payment Required` with the exact payment details (amount, recipient wallet, network). To make paid calls automatically, set `MCP_PAYMENT_HEADER` to a valid x402 payment proof and `MCP_AGENT_ADDRESS` to your wallet. Get test USDC at the [Circle faucet](https://faucet.circle.com/) (Base Sepolia) or use real USDC on Base mainnet.
+Without `MCP_PRIVATE_KEY`, calling a paid tool returns a `402 Payment Required` with payment details (amount, recipient, network). Your AI client will show these details and ask you to configure payment.
+
+To enable automatic payments:
+1. Get USDC on Base — [bridge.base.org](https://bridge.base.org) (mainnet) or [faucet.circle.com](https://faucet.circle.com/) (testnet)
+2. Set `MCP_PRIVATE_KEY` to your wallet's private key
+3. Each API call automatically signs and sends a unique x402 payment — your key never leaves your machine
+
+You can also use the `aiscale-pay` CLI for one-off paid calls:
+```bash
+MCP_PRIVATE_KEY=0x... aiscale-pay sentiment AAPL
+```
 
 ## Local development
 
