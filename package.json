@@ -1,7 +1,34 @@
 {
   "name": "agent-services-platform",
   "version": "1.0.0",
-  "description": "Crypto-native micropayment platform for AI agent services via x402 protocol on Base L2",
+  "description": "MCP server exposing AI agent services — research, contract analysis, code review & data enrichment — with x402 micropayments on Base L2",
+  "license": "MIT",
+  "author": "ry4ever <ry4ever@users.noreply.github.com>",
+  "homepage": "https://agents.aiscale.pro",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ry4ever/ai-agent.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ry4ever/ai-agent/issues"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "ai",
+    "agents",
+    "x402",
+    "base",
+    "usdc",
+    "micropayments",
+    "claude",
+    "cursor",
+    "contract-analysis",
+    "code-review"
+  ],
+  "files": [
+    "dist"
+  ],
   "main": "dist/index.js",
   "bin": {
     "aiscale-mcp": "dist/mcp/server.js"
@@ -16,7 +43,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "seed": "ts-node src/scripts/seed-transactions.ts",
-    "mcp": "ts-node src/mcp/server.ts"
+    "mcp": "ts-node src/mcp/server.ts",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
