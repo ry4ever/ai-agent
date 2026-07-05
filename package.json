@@ -1,6 +1,6 @@
 {
   "name": "agent-services-platform",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "MCP server exposing AI agent services — research, contract analysis, code review & data enrichment — with x402 micropayments on Base L2",
   "license": "MIT",
   "author": "ry4ever <ry4ever@users.noreply.github.com>",
