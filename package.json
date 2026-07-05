@@ -7,7 +7,7 @@
   "homepage": "https://agents.aiscale.pro",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ry4ever/ai-agent.git"
+    "url": "git+https://github.com/ry4ever/ai-agent.git"
   },
   "bugs": {
     "url": "https://github.com/ry4ever/ai-agent/issues"
