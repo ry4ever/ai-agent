@@ -1,15 +1,23 @@
 {
-  "_comment": "Add this to your Claude Desktop config at ~/Library/Application Support/Claude/claude_desktop_config.json (macOS) or %APPDATA%\\Claude\\claude_desktop_config.json (Windows). See: https://modelcontextprotocol.io/quickstart/user",
+  "_readme": "Add the relevant block below to your MCP client config. The server runs against the live production API (https://agents.aiscale.pro) by default — no local setup needed. Override PLATFORM_URL to point elsewhere.",
+  "_claude_desktop_path": {
+    "macOS": "~/Library/Application Support/Claude/claude_desktop_config.json",
+    "Windows": "%APPDATA%\\Claude\\claude_desktop_config.json"
+  },
+
   "mcpServers": {
-    "agent-services-platform": {
+    "aiscale": {
       "command": "npx",
-      "args": ["ts-node", "/path/to/agent-services-platform/src/mcp/server.ts"],
+      "args": ["-y", "agent-services-platform"],
       "env": {
-        "PLATFORM_URL": "http://localhost:3000",
-        "MCP_AGENT_ADDRESS": "0xYourWalletAddress",
-        "MCP_PAYMENT_HEADER": "",
-        "ANTHROPIC_API_KEY": "your_key_here"
+        "PLATFORM_URL": "https://agents.aiscale.pro",
+        "MCP_AGENT_ADDRESS": "",
+        "MCP_PAYMENT_HEADER": ""
       }
     }
-  }
+  },
+
+  "_cursor_note": "For Cursor, add the same mcpServers block to ~/.cursor/mcp.json (or Settings → MCP).",
+  "_smithery_note": "To list on Smithery (smithery.ai): connect your GitHub repo ry4ever/ai-agent. Smithery auto-detects the MCP server at src/mcp/server.ts via the bin entry in package.json.",
+  "_payment_note": "Leave MCP_PAYMENT_HEADER empty to explore services for free (calls return payment instructions on the paywalled routes). To make paid calls, set it to a valid base64 x402 payment proof and set MCP_AGENT_ADDRESS to your wallet."
 }

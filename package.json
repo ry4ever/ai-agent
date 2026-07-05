@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "Crypto-native micropayment platform for AI agent services via x402 protocol on Base L2",
   "main": "dist/index.js",
+  "bin": {
+    "aiscale-mcp": "dist/mcp/server.js"
+  },
   "scripts": {
     "build": "tsc && node -e \"require('fs').cpSync('src/db/migrations','dist/db/migrations',{recursive:true})\"",
     "start": "node dist/index.js",

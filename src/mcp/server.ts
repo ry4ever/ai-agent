@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 /**
  * MCP Server Wrapper
  *
@@ -7,14 +8,17 @@
  * the addressable market beyond crypto-native agents.
  *
  * Architecture:
- *   MCP Client (Claude, etc.)
- *     → MCP tools (this file)
+ *   MCP Client (Claude, Cursor, VS Code, ...)
+ *     → MCP tools (this file, run over stdio)
  *       → HTTP calls to the platform (with x402 payment header if configured)
  *         → paywalled API endpoints
  *
+ * Runs against the live production API by default. Override with PLATFORM_URL.
+ *
  * Usage:
- *   ts-node src/mcp/server.ts
- *   # Or add to Claude Desktop / VS Code MCP config
+ *   npx agent-services-platform          # after npm publish
+ *   npm run mcp                          # local dev (ts-node)
+ *   node dist/mcp/server.js              # built
  */
 
 import 'dotenv/config';
@@ -27,7 +31,10 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import axios, { AxiosInstance } from 'axios';
 
-const PLATFORM_URL = process.env.PLATFORM_URL ?? `http://localhost:${process.env.PORT ?? 3000}`;
+// Defaults to the live production API so the server works out-of-the-box for
+// anyone who installs it. Override with PLATFORM_URL to point elsewhere
+// (e.g. http://localhost:3000 for local development).
+const PLATFORM_URL = process.env.PLATFORM_URL ?? 'https://agents.aiscale.pro';
 const PAYMENT_HEADER = process.env.MCP_PAYMENT_HEADER ?? '';
 const AGENT_ADDRESS = process.env.MCP_AGENT_ADDRESS ?? '0x0000000000000000000000000000000000000000';
 
