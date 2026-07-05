@@ -64,11 +64,12 @@ export async function insertTransaction(params: {
   service_endpoint: string;
   amount_usdc: number;
   metadata?: Record<string, unknown>;
-}): Promise<Transaction> {
+}): Promise<Transaction | undefined> {
   const db = getPool();
   const result = await db.query<Transaction>(
     `INSERT INTO transactions (id, tx_hash, agent_address, service_endpoint, amount_usdc, metadata)
      VALUES ($1, $2, $3, $4, $5, $6)
+     ON CONFLICT (tx_hash) DO NOTHING
      RETURNING *`,
     [
       uuidv4(),
