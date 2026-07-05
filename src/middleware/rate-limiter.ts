@@ -48,7 +48,7 @@ function fallbackToMemory(): void {
 }
 
 export function rateLimitByAgent(req: Request, res: Response, next: NextFunction): void {
-  if (req.path === '/health' || req.path === '/stats' || req.path.startsWith('/.well-known/') || req.path === '/') {
+  if (req.path === '/health' || req.path === '/stats' || req.path.startsWith('/stats/') || req.path.startsWith('/.well-known/') || req.path === '/') {
     return next();
   }
 

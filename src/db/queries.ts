@@ -173,6 +173,61 @@ export async function getRevenueStats(days = 7): Promise<RevenueStats> {
   };
 }
 
+export interface TransactionPage {
+  transactions: Transaction[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+/**
+ * Paginated list of recorded payments, newest first.
+ * Optionally filtered by service_endpoint.
+ */
+export async function getTransactions(params: {
+  limit?: number;
+  offset?: number;
+  service?: string;
+}): Promise<TransactionPage> {
+  const db = getPool();
+  const limit = clampInt(params.limit ?? 50, 50, 1, 200);
+  const offset = clampInt(params.offset ?? 0, 0, 0, 1_000_000);
+  const service = params.service?.trim() || undefined;
+
+  const cols =
+    'id, tx_hash, agent_address, service_endpoint, amount_usdc::double precision AS amount_usdc, timestamp, status';
+
+  const [listResult, countResult] = await Promise.all([
+    service
+      ? db.query<Transaction>(
+          `SELECT ${cols} FROM transactions WHERE service_endpoint = $3 ORDER BY timestamp DESC LIMIT $1 OFFSET $2`,
+          [limit, offset, service]
+        )
+      : db.query<Transaction>(
+          `SELECT ${cols} FROM transactions ORDER BY timestamp DESC LIMIT $1 OFFSET $2`,
+          [limit, offset]
+        ),
+    service
+      ? db.query<{ total: number }>(
+          `SELECT COUNT(*)::int AS total FROM transactions WHERE service_endpoint = $1`,
+          [service]
+        )
+      : db.query<{ total: number }>(`SELECT COUNT(*)::int AS total FROM transactions`),
+  ]);
+
+  return {
+    transactions: listResult.rows,
+    total: countResult.rows[0].total,
+    limit,
+    offset,
+  };
+}
+
+function clampInt(value: number, fallback: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(Math.max(Math.trunc(value), min), max);
+}
+
 export async function runMigrations(): Promise<void> {
   const db = getPool();
   const fs = await import('fs');

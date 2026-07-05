@@ -24,7 +24,9 @@ import { registryHandler } from './discovery/registry';
 import { agentCardHandler } from './discovery/agent-card';
 import { healthHandler } from './discovery/health';
 import { statsHandler } from './discovery/stats';
+import { transactionsHandler } from './discovery/transactions';
 import { landingHandler } from './discovery/landing';
+import { requireAdmin } from './middleware/admin-auth';
 import { PRICING } from './config/pricing';
 
 const app = express();
@@ -53,7 +55,8 @@ app.use(rateLimitByAgent);
 // --- Discovery / utility (no paywall) ---
 app.get('/', landingHandler);
 app.get('/health', healthHandler);
-app.get('/stats', statsHandler);
+app.get('/stats', requireAdmin, statsHandler);
+app.get('/stats/transactions', requireAdmin, transactionsHandler);
 app.get('/.well-known/agent-services', registryHandler);
 app.get('/.well-known/agent.json', agentCardHandler);
 app.get('/.well-known/agent-card.json', agentCardHandler);
