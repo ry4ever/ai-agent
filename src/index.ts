@@ -23,6 +23,7 @@ import { researchSynthHandler } from './services/sub-agents/research-synth';
 import { registryHandler } from './discovery/registry';
 import { agentCardHandler } from './discovery/agent-card';
 import { healthHandler } from './discovery/health';
+import { statsHandler } from './discovery/stats';
 import { landingHandler } from './discovery/landing';
 import { PRICING } from './config/pricing';
 
@@ -52,6 +53,7 @@ app.use(rateLimitByAgent);
 // --- Discovery / utility (no paywall) ---
 app.get('/', landingHandler);
 app.get('/health', healthHandler);
+app.get('/stats', statsHandler);
 app.get('/.well-known/agent-services', registryHandler);
 app.get('/.well-known/agent.json', agentCardHandler);
 app.get('/.well-known/agent-card.json', agentCardHandler);
