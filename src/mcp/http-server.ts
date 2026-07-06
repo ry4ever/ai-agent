@@ -19,8 +19,7 @@ import {
   ListToolsRequestSchema,
   Tool,
 } from '@modelcontextprotocol/sdk/types.js';
-
-const PLATFORM_URL = process.env.PLATFORM_URL ?? process.env.AGENT_URL ?? `http://localhost:${process.env.PORT ?? '3000'}`;
+import { SERVICE_DEFINITIONS } from '../config/services';
 
 // ---------------------------------------------------------------------------
 // Tool definitions (mirrors src/mcp/server.ts)
@@ -133,117 +132,61 @@ const TOOLS: Tool[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// Tool call handler — calls the platform API
+// Tool call handler — discovery mode (no self-HTTP calls)
 // ---------------------------------------------------------------------------
+// The HTTP MCP endpoint exposes tools for discovery (Smithery scanning,
+// remote clients exploring). Actual paid calls require the npm package
+// with MCP_PRIVATE_KEY set locally.
 
-async function callTool(
+const PAYMENT_INSTRUCTIONS =
+  'This is a paid service. To make calls:\n' +
+  '1. npm install -g agent-services-platform\n' +
+  '2. Set MCP_PRIVATE_KEY to your wallet key (0x...)\n' +
+  '3. Run aiscale-mcp or use the stdio MCP server\n\n' +
+  'Get USDC on Base: https://bridge.base.org\n' +
+  'Free test USDC: https://faucet.circle.com';
+
+const PRICING: Record<string, string> = {
+  get_sentiment: '$0.002',
+  get_company_profile: '$0.005',
+  enrich_email: '$0.008',
+  get_news_summary: '$0.003',
+  extract_structured_data: '$0.004',
+  analyze_contract: '$0.10',
+  review_code: '$0.05',
+  synthesize_research: '$0.15',
+};
+
+function callTool(
   name: string,
-  args: Record<string, unknown>
-): Promise<{ content: Array<{ type: 'text'; text: string }> }> {
-  try {
-    let response: unknown;
-
-    switch (name) {
-      case 'get_sentiment': {
-        const res = await fetch(`${PLATFORM_URL}/api/v1/sentiment/${encodeURIComponent(String(args.ticker))}`);
-        response = await handleRes(res);
-        break;
-      }
-      case 'get_company_profile': {
-        const res = await fetch(`${PLATFORM_URL}/api/v1/company/${encodeURIComponent(String(args.domain))}`);
-        response = await handleRes(res);
-        break;
-      }
-      case 'enrich_email': {
-        const res = await fetch(`${PLATFORM_URL}/api/v1/enrich/email/${encodeURIComponent(String(args.email))}`);
-        response = await handleRes(res);
-        break;
-      }
-      case 'get_news_summary': {
-        const u = new URL(`${PLATFORM_URL}/api/v1/news/summary`);
-        u.searchParams.set('q', String(args.query));
-        const res = await fetch(u.toString());
-        response = await handleRes(res);
-        break;
-      }
-      case 'extract_structured_data': {
-        const res = await fetch(`${PLATFORM_URL}/api/v1/extract`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: args.url, html: args.html }),
-        });
-        response = await handleRes(res);
-        break;
-      }
-      case 'analyze_contract': {
-        const res = await fetch(`${PLATFORM_URL}/api/v1/analyze/contract`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: args.url, text: args.text }),
-        });
-        response = await handleRes(res);
-        break;
-      }
-      case 'review_code': {
-        const res = await fetch(`${PLATFORM_URL}/api/v1/review/code`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code: args.code, language: args.language }),
-        });
-        response = await handleRes(res);
-        break;
-      }
-      case 'synthesize_research': {
-        const res = await fetch(`${PLATFORM_URL}/api/v1/research`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ question: args.question, depth: args.depth ?? 'standard' }),
-        });
-        response = await handleRes(res);
-        break;
-      }
-      case 'list_services': {
-        const res = await fetch(`${PLATFORM_URL}/.well-known/agent-services`);
-        response = await handleRes(res);
-        break;
-      }
-      default:
-        return { content: [{ type: 'text', text: `Unknown tool: ${name}` }] };
-    }
-
-    return { content: [{ type: 'text', text: JSON.stringify(response, null, 2) }] };
-  } catch (err) {
-    const e = err as { status?: number; data?: unknown; message: string };
-    if (e.status === 402) {
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            'Payment required. Install locally with MCP_PRIVATE_KEY to pay automatically:',
-            '  npm install -g agent-services-platform',
-            '  MCP_PRIVATE_KEY=0x... aiscale-mcp',
-            '',
-            'Payment details:',
-            JSON.stringify(e.data, null, 2),
-          ].join('\n'),
-        }],
-      };
-    }
+  _args: Record<string, unknown>
+): { content: Array<{ type: 'text'; text: string }> } {
+  if (name === 'list_services') {
     return {
       content: [{
         type: 'text',
-        text: `Error calling ${name}: ${e.status ?? 'network error'} — ${e.message}`,
+        text: JSON.stringify({
+          services: SERVICE_DEFINITIONS.map(s => ({
+            endpoint: s.endpoint,
+            method: s.method,
+            description: s.description,
+            price: `$${s.priceUSDC}`,
+            category: s.category,
+          })),
+          install: 'npm install -g agent-services-platform',
+          website: 'https://agents.aiscale.pro',
+        }, null, 2),
       }],
     };
   }
-}
 
-async function handleRes(res: globalThis.Response): Promise<unknown> {
-  const text = await res.text();
-  let data: unknown = text;
-  try { data = JSON.parse(text); } catch { /* keep text */ }
-  if (!res.ok) throw { status: res.status, data, message: `HTTP ${res.status}` };
-  return data;
+  const price = PRICING[name] ?? 'unknown';
+  return {
+    content: [{
+      type: 'text',
+      text: `${name} costs ${price} USDC per call.\n\n${PAYMENT_INSTRUCTIONS}`,
+    }],
+  };
 }
 
 // ---------------------------------------------------------------------------
