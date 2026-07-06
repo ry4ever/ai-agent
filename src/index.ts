@@ -27,6 +27,7 @@ import { statsHandler } from './discovery/stats';
 import { transactionsHandler } from './discovery/transactions';
 import { landingHandler } from './discovery/landing';
 import { requireAdmin } from './middleware/admin-auth';
+import { mcpHttpHandler } from './mcp/http-server';
 import { PRICING } from './config/pricing';
 
 const app = express();
@@ -60,6 +61,13 @@ app.get('/stats/transactions', requireAdmin, transactionsHandler);
 app.get('/.well-known/agent-services', registryHandler);
 app.get('/.well-known/agent.json', agentCardHandler);
 app.get('/.well-known/agent-card.json', agentCardHandler);
+
+// --- MCP Streamable HTTP endpoint ---
+// Smithery and remote MCP clients connect here. Tool calls route to the
+// paywalled API endpoints internally — payment is handled per-call.
+app.post('/mcp', mcpHttpHandler());
+app.get('/mcp', mcpHttpHandler()); // SSE stream for server-initiated notifications
+app.delete('/mcp', mcpHttpHandler()); // session termination
 
 // --- x402 Paywalled Routes ---
 // A single paymentMiddleware instance (from x402-bazaar-config.ts) covers all routes.
