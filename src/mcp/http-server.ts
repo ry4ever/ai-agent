@@ -20,7 +20,7 @@ import {
   Tool,
 } from '@modelcontextprotocol/sdk/types.js';
 
-const PLATFORM_URL = process.env.PLATFORM_URL ?? `http://localhost:${process.env.PORT ?? '3000'}`;
+const PLATFORM_URL = process.env.PLATFORM_URL ?? process.env.AGENT_URL ?? `http://localhost:${process.env.PORT ?? '3000'}`;
 
 // ---------------------------------------------------------------------------
 // Tool definitions (mirrors src/mcp/server.ts)
