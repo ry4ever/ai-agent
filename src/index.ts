@@ -95,14 +95,21 @@ async function start(): Promise<void> {
   try {
     logger.info('Starting Agent Services Platform...');
 
-    // Pre-flight: critical env vars
+    // Pre-flight: critical env vars.
+    // Without WALLET_ADDRESS, every paywalled route advertises an empty payTo
+    // (getPayTo in x402-bazaar-config) and cannot route x402 payments — a silent
+    // failure best caught at boot rather than as malformed 402s in production.
     const missing: string[] = [];
     if (!process.env.DATABASE_URL) missing.push('DATABASE_URL');
+    if (!process.env.WALLET_ADDRESS) missing.push('WALLET_ADDRESS');
+
     if (missing.length > 0) {
-      const msg = `Missing required environment variables: ${missing.join(', ')}. ` +
-        (missing.includes('DATABASE_URL')
-          ? 'Add a PostgreSQL service on Railway and ensure DATABASE_URL is set. '
-          : '');
+      const hints: Record<string, string> = {
+        DATABASE_URL: 'Add a PostgreSQL service on Railway and ensure DATABASE_URL is set.',
+        WALLET_ADDRESS: 'Set WALLET_ADDRESS to the USDC (Base) address that should receive x402 payments.',
+      };
+      const detail = missing.map((m) => `  • ${m}: ${hints[m] ?? ''}`).join('\n');
+      const msg = `Missing required environment variables:\n${detail}`;
       logger.error('Configuration error', { missing, detail: msg });
       console.error(`[FATAL] ${msg}`);
       process.exit(1);
