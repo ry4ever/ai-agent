@@ -44,6 +44,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "seed": "ts-node src/scripts/seed-transactions.ts",
+    "is-listed": "ts-node src/scripts/is-listed.ts",
     "mcp": "ts-node src/mcp/server.ts",
     "prepublishOnly": "npm run build"
   },
