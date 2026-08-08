@@ -106,26 +106,6 @@ export async function upsertDailyRevenue(params: {
   );
 }
 
-export async function recordAgentRequest(params: {
-  agent_address: string;
-  service_endpoint: string;
-  paid: boolean;
-  response_ms?: number;
-}): Promise<void> {
-  const db = getPool();
-  await db.query(
-    `INSERT INTO agent_requests (id, agent_address, service_endpoint, paid, response_ms)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [
-      uuidv4(),
-      params.agent_address.toLowerCase(),
-      params.service_endpoint,
-      params.paid,
-      params.response_ms ?? null,
-    ]
-  );
-}
-
 export interface RevenueStats {
   total_usdc: number;
   total_requests: number;

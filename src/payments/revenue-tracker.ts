@@ -17,10 +17,24 @@ export function trackRevenue(
     // Convert micro-USDC to USDC decimal
     const amountUSDC = parseInt(priceInMicroUSDC) / 1_000_000;
 
-    // Use payment hash or generate a tracking ID
+    // This middleware runs after the paywall, so X-PAYMENT should always be
+    // present. If it isn't, something is misconfigured (e.g. a route mounted
+    // with trackRevenue but no paywall ahead of it) — surface it loudly rather
+    // than silently inventing a non-deterministic id that defeats the tx_hash
+    // dedupe in insertTransaction.
     const txHash = paymentHeader
       ? extractTxHash(paymentHeader)
-      : `local_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      : `missing-payment_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
+    if (!paymentHeader) {
+      logger.warn('Revenue recorded without an X-PAYMENT header — unexpected after paywall', {
+        event: 'missing_payment_header',
+        endpoint,
+        method: req.method,
+        path: req.path,
+        agentAddress,
+      });
+    }
 
     const logCtx = { txHash, agentAddress, endpoint, amountUSDC };
 
