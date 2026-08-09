@@ -35,13 +35,11 @@ function normalizeApiKeySecret(raw: string | undefined): string | undefined {
   // Expand literal \n sequences (single-line .env storage) and strip \r
   // (Windows CRLF in dotenv values).
   const key = raw.replace(/\\n/g, '\n').replace(/\r/g, '');
-  log(`[debug] apiKeySecret length=${key.length} head="${key.slice(0, 40)}" tail="${key.slice(-40).trimEnd()}"`);
 
   if (key.includes('-----BEGIN EC PRIVATE KEY-----')) {
     // CDP SDK (jose v6) requires PKCS#8. Convert using pure Buffer arithmetic
     // so we never call createPrivateKey, which fails on some Windows OpenSSL builds.
     const pkcs8 = sec1ToP256Pkcs8Pem(key);
-    log(`[debug] converted to PKCS#8, length=${pkcs8.length}`);
     return pkcs8;
   }
 
