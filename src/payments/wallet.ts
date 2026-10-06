@@ -1,6 +1,6 @@
 import { CdpClient } from '@coinbase/cdp-sdk';
 import { logger } from '../middleware/logger';
-import { createPrivateKey } from 'crypto';
+import { normalizeCdpApiKeySecret } from '../utils/pem';
 
 // Types inferred from CDP SDK v2
 type SmartAccount = Awaited<ReturnType<CdpClient['evm']['getOrCreateSmartAccount']>>;
@@ -8,28 +8,11 @@ type SmartAccount = Awaited<ReturnType<CdpClient['evm']['getOrCreateSmartAccount
 let _cdp: CdpClient | null = null;
 let _smartAccount: SmartAccount | null = null;
 
-/**
- * Normalizes the CDP API key secret:
- * 1. Replaces literal \n with real newlines (for env vars stored on one line)
- * 2. Converts SEC1 EC key (-----BEGIN EC PRIVATE KEY-----) to PKCS#8
- *    (-----BEGIN PRIVATE KEY-----) which the CDP SDK's jose library requires
- */
-function normalizeApiKeySecret(raw: string | undefined): string | undefined {
-  if (!raw) return raw;
-  const pem = raw.replace(/\\n/g, '\n');
-  if (pem.includes('-----BEGIN EC PRIVATE KEY-----')) {
-    const pkcs8 = createPrivateKey({ key: pem, format: 'pem' })
-      .export({ type: 'pkcs8', format: 'pem' }) as string;
-    return pkcs8;
-  }
-  return pem;
-}
-
 function getCdpClient(): CdpClient {
   if (!_cdp) {
     _cdp = new CdpClient({
       apiKeyId: process.env.CDP_API_KEY_ID,
-      apiKeySecret: normalizeApiKeySecret(process.env.CDP_API_KEY_SECRET),
+      apiKeySecret: normalizeCdpApiKeySecret(process.env.CDP_API_KEY_SECRET),
       walletSecret: process.env.CDP_WALLET_SECRET,
     });
   }
@@ -50,10 +33,41 @@ export async function initWallet(): Promise<void> {
     const smartAccount = await getOrCreateSmartAccount();
     if (smartAccount) {
       logger.info('Smart account initialized', { address: smartAccount.address });
+      assertPayToMatchesSmartAccount(smartAccount.address);
     }
   } catch (err) {
     logger.error('Failed to initialize CDP smart account', { err });
   }
+}
+
+/**
+ * The paywall advertises `WALLET_ADDRESS` as the x402 payTo on every route
+ * (see src/config/x402-bazaar-config.ts#getPayTo), so if the live smart
+ * account's address differs, mainnet customers pay to an address we don't
+ * control from this process. In production we refuse to continue; in dev we
+ * warn, because mismatch is a frequent setup intermediate.
+ */
+function assertPayToMatchesSmartAccount(smartAccountAddress: string): void {
+  const configured = (process.env.WALLET_ADDRESS ?? '').toLowerCase();
+  const actual = smartAccountAddress.toLowerCase();
+  if (!configured || configured === actual) return;
+
+  const detail = `WALLET_ADDRESS=${configured} does not match live smart account ${actual}`;
+  if (process.env.NODE_ENV === 'production') {
+    logger.error('Fatal payTo mismatch — refusing to serve', {
+      event: 'wallet_address_mismatch',
+      configured,
+      actual,
+    });
+    console.error(`[FATAL] ${detail}. Set WALLET_ADDRESS=${actual} and restart.`);
+    process.exit(1);
+  }
+  logger.warn('WALLET_ADDRESS does not match the live smart account', {
+    event: 'wallet_address_mismatch',
+    configured,
+    actual,
+    hint: `Set WALLET_ADDRESS=${actual} to collect payments on the correct address.`,
+  });
 }
 
 export async function getOrCreateSmartAccount(): Promise<SmartAccount | null> {
