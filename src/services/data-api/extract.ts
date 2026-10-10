@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { logger } from '../../middleware/logger';
 import { safeFetch, SsrfError } from '../../utils/ssrf-guard';
 
-const ExtractRequestSchema = z.object({
+export const ExtractRequestSchema = z.object({
   url: z.string().url().optional(),
   html: z.string().max(500_000).optional(),
 }).refine((data) => data.url ?? data.html, {

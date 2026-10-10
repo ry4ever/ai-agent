@@ -6,7 +6,7 @@ import { safeFetch, SsrfError } from '../../utils/ssrf-guard';
 
 const AI_TIMEOUT_MS = 30_000;
 
-const ContractRequestSchema = z.object({
+export const ContractRequestSchema = z.object({
   url: z.string().url().optional(),
   text: z.string().max(200_000).optional(),
   filename: z.string().optional(),

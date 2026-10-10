@@ -1,140 +1,142 @@
 import { createHash } from 'crypto';
-import { Request, Response, NextFunction } from 'express';
+import type { AfterSettleHook, SettleResultContext } from '@x402/core/server';
 import { insertTransaction, upsertDailyRevenue } from '../db/queries';
 import { paymentLogger, logger } from '../middleware/logger';
+import { routeConfigs } from '../config/x402-bazaar-config';
 
-// This middleware runs after a successful x402 payment verification.
-// It logs the payment to the database and updates daily revenue aggregates.
-export function trackRevenue(
-  endpoint: string,
-  priceInMicroUSDC: string
-) {
-  return (req: Request, _res: Response, next: NextFunction): void => {
-    // Extract payment info from request (populated by x402 middleware)
-    const paymentHeader = req.headers['x-payment'] as string | undefined;
-    const agentAddress = (req.headers['x-agent-address'] as string) ?? '0x0000000000000000000000000000000000000000';
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 
-    // Convert micro-USDC to USDC decimal
-    const amountUSDC = parseInt(priceInMicroUSDC) / 1_000_000;
+// Upper bound on how long we'll block the paid response waiting for the two
+// bookkeeping writes to settle. The on-chain settle has already happened by
+// the time this hook runs — we must never fail the paid response over DB
+// bookkeeping. 2s balances DB latency against SIGTERM drain safety.
+const DB_WRITE_TIMEOUT_MS = 2000;
 
-    // This middleware runs after the paywall, so X-PAYMENT should always be
-    // present. If it isn't, something is misconfigured (e.g. a route mounted
-    // with trackRevenue but no paywall ahead of it) — surface it loudly rather
-    // than silently inventing a non-deterministic id that defeats the tx_hash
-    // dedupe in insertTransaction.
-    const txHash = paymentHeader
-      ? extractTxHash(paymentHeader)
-      : `missing-payment_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+// Analytics labels are derived from routeConfigs (the single source of truth).
+// We strip trailing /:param segments so '/api/v1/sentiment/:ticker' becomes
+// '/api/v1/sentiment' — same convention the Express mounts used before.
+interface EndpointRule {
+  method: string;
+  pattern: RegExp;
+  label: string;
+}
+const SERVICE_ENDPOINT_RULES: EndpointRule[] = Object.keys(routeConfigs).map((key) => {
+  const [method, rawPath] = key.split(' ');
+  const pattern = new RegExp('^' + rawPath.replace(/:[^/]+/g, '[^/]+') + '$');
+  const label = rawPath.replace(/(\/:[^/]+)+$/, '');
+  return { method: method.toUpperCase(), pattern, label };
+});
 
-    if (!paymentHeader) {
-      logger.warn('Revenue recorded without an X-PAYMENT header — unexpected after paywall', {
-        event: 'missing_payment_header',
-        endpoint,
-        method: req.method,
-        path: req.path,
-        agentAddress,
-      });
-    }
+function labelFor(method: string, path: string): string {
+  const rule = SERVICE_ENDPOINT_RULES.find((r) => r.method === method && r.pattern.test(path));
+  return rule?.label ?? path;
+}
 
-    const logCtx = { txHash, agentAddress, endpoint, amountUSDC };
+/**
+ * Resource-server AfterSettleHook: records revenue for payments that
+ * actually settled on-chain. Replaces the old `trackRevenue` Express
+ * middleware, which ran between the paywall and the handler and
+ * therefore recorded a `transactions` row for every paid request,
+ * including those the paywall then cancelled on a 4xx/5xx response.
+ *
+ * This hook only fires for successful settlements, so cancelled
+ * payments no longer leave ghost DB rows.
+ */
+export const revenueTrackerHook: AfterSettleHook = async (ctx: SettleResultContext): Promise<void> => {
+  // Defensive: AfterSettleHook is already scoped to post-settle, but a
+  // scheme could in principle surface a non-success result here.
+  if (!ctx.result.success) return;
 
-    // Decoupled, non-blocking DB writes. Each operation runs independently
-    // with its own error handler. Previously both were bundled in Promise.all,
-    // so a failure in insertTransaction (e.g. a tx_hash collision) caused the
-    // whole promise to reject and overshadowed upsertDailyRevenue — which
-    // still succeeded silently in the background. That decoupling bug is why
-    // revenue_daily filled up while the transactions table stayed nearly empty.
-    // The user has already paid, so we must never fail the request over logging.
-    insertTransaction({
-      tx_hash: txHash,
-      agent_address: agentAddress,
-      service_endpoint: endpoint,
-      amount_usdc: amountUSDC,
-      metadata: {
-        method: req.method,
-        path: req.path,
-        userAgent: req.headers['user-agent'],
-      },
+  const transport = ctx.transportContext as
+    | { request?: { method?: string; path?: string; paymentHeader?: string } }
+    | undefined;
+  const method = (transport?.request?.method ?? 'UNKNOWN').toUpperCase();
+  const path = transport?.request?.path ?? '';
+  const endpoint = labelFor(method, path);
+
+  // Agent address comes from the facilitator's verified payer first, then
+  // the signed EIP-3009 `authorization.from` as a fallback (same source;
+  // defence in depth against the facilitator ever omitting `payer`).
+  const payload = ctx.paymentPayload.payload as
+    | { authorization?: { from?: string } }
+    | undefined;
+  const agentAddress = (ctx.result.payer ?? payload?.authorization?.from ?? ZERO_ADDRESS).toLowerCase();
+
+  const txHash = (ctx.result.transaction || deriveTxHashFallback(transport?.request?.paymentHeader)).toLowerCase();
+
+  // Prefer the actually-settled amount (upto scheme bills by usage); fall
+  // back to the authorised max. The `requirements` type is intentionally
+  // scheme-agnostic here, so narrow with an inline cast.
+  const amountMicroUSDC =
+    ctx.result.amount ??
+    (ctx.requirements as unknown as { amount?: string; maxAmountRequired?: string }).amount ??
+    (ctx.requirements as unknown as { maxAmountRequired?: string }).maxAmountRequired ??
+    '0';
+  const amountUSDC = parseInt(amountMicroUSDC, 10) / 1_000_000;
+
+  const logCtx = { txHash, agentAddress, endpoint, amountUSDC };
+
+  const insertPromise = insertTransaction({
+    tx_hash: txHash,
+    agent_address: agentAddress,
+    service_endpoint: endpoint,
+    amount_usdc: amountUSDC,
+    metadata: {
+      settled_via: 'x402_after_settle_hook',
+      network: ctx.result.network,
+      method,
+      path,
+    },
+  })
+    .then(() => {
+      paymentLogger(logCtx);
     })
-      .then(() => {
-        paymentLogger(logCtx);
-      })
-      .catch((err) => {
-        logger.error('Transaction insert failed', {
-          event: 'transaction_insert_error',
-          ...logCtx,
-          error: err instanceof Error ? err.message : String(err),
-          stack: err instanceof Error ? err.stack : undefined,
-        });
-      });
-
-    upsertDailyRevenue({
-      service_endpoint: endpoint,
-      amount_usdc: amountUSDC,
-      agent_address: agentAddress,
-    }).catch((err) => {
-      logger.error('Daily revenue upsert failed', {
-        event: 'revenue_upsert_error',
+    .catch((err) => {
+      logger.error('Transaction insert failed', {
+        event: 'transaction_insert_error',
         ...logCtx,
         error: err instanceof Error ? err.message : String(err),
         stack: err instanceof Error ? err.stack : undefined,
       });
     });
 
-    next();
-  };
-}
+  const upsertPromise = upsertDailyRevenue({
+    service_endpoint: endpoint,
+    amount_usdc: amountUSDC,
+    agent_address: agentAddress,
+  }).catch((err) => {
+    logger.error('Daily revenue upsert failed', {
+      event: 'revenue_upsert_error',
+      ...logCtx,
+      error: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+    });
+  });
 
-const EVM_TX_HASH_RE = /^0x[a-fA-F0-9]{64}$/;
+  try {
+    await Promise.race([
+      Promise.allSettled([insertPromise, upsertPromise]),
+      new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('db_write_timeout')), DB_WRITE_TIMEOUT_MS);
+      }),
+    ]);
+  } catch {
+    logger.error('Revenue tracking writes exceeded timeout', {
+      event: 'revenue_write_timeout',
+      ...logCtx,
+      timeout_ms: DB_WRITE_TIMEOUT_MS,
+    });
+  }
+};
 
-/**
- * Extract a transaction hash from an x402 payment header.
- *
- * The header is a base64-encoded JSON payment payload. The real on-chain tx
- * hash is usually nested deep inside `payload` (not at the top level), so we
- * recursively search for any value that looks like an EVM tx hash.
- *
- * If none is found, we derive a deterministic unique id by hashing the full
- * payment proof with sha256. This guarantees:
- *   - distinct payments → distinct hashes (no collisions on the UNIQUE index)
- *   - replayed payments → same hash (caught by ON CONFLICT DO NOTHING)
- *   - fits VARCHAR(66): '0x' + 64 hex chars = 66
- */
-export function extractTxHash(paymentHeader: string): string {
-  const decoded = tryDecodeB64Json(paymentHeader);
-  if (decoded !== null) {
-    const found = findEvmTxHash(decoded);
-    if (found) {
-      return found.toLowerCase();
-    }
+// Only used when the facilitator omitted result.transaction, which shouldn't
+// happen for a successful settlement — kept as a last-ditch dedupe key for
+// the UNIQUE(tx_hash) constraint rather than inventing a time-based id.
+function deriveTxHashFallback(paymentHeader: string | undefined): string {
+  if (!paymentHeader) {
+    return '0x' + createHash('sha256').update('missing_settlement_tx:' + Date.now()).digest('hex');
   }
   return '0x' + createHash('sha256').update(paymentHeader).digest('hex');
 }
 
-function tryDecodeB64Json(s: string): unknown {
-  try {
-    return JSON.parse(Buffer.from(s, 'base64').toString('utf8'));
-  } catch {
-    return null;
-  }
-}
-
-function findEvmTxHash(node: unknown): string | null {
-  if (typeof node === 'string') {
-    return EVM_TX_HASH_RE.test(node) ? node : null;
-  }
-  if (Array.isArray(node)) {
-    for (const item of node) {
-      const found = findEvmTxHash(item);
-      if (found) return found;
-    }
-    return null;
-  }
-  if (node && typeof node === 'object') {
-    for (const value of Object.values(node as Record<string, unknown>)) {
-      const found = findEvmTxHash(value);
-      if (found) return found;
-    }
-  }
-  return null;
-}
+export const EXPORTED_FOR_TESTS = { labelFor, SERVICE_ENDPOINT_RULES };

@@ -3,7 +3,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 import { logger } from '../../middleware/logger';
 
-const CodeReviewRequestSchema = z.object({
+export const CodeReviewRequestSchema = z.object({
   code: z.string().max(100_000),
   language: z.string().optional(),
   filename: z.string().optional(),

@@ -4,7 +4,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 import { logger } from '../../middleware/logger';
 
-const ResearchRequestSchema = z.object({
+export const ResearchRequestSchema = z.object({
   question: z.string().min(10).max(500),
   depth: z.enum(['quick', 'standard', 'deep']).default('standard'),
 });
