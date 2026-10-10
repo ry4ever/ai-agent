@@ -1,0 +1,63 @@
+name: Deploy
+
+# Deploys main to Railway once CI has passed on it. Replaces Railway's
+# dashboard GitHub integration, which stopped picking up pushes.
+#
+# Required repo configuration (Settings → Secrets and variables → Actions):
+#   secrets.RAILWAY_API_TOKEN   Railway account token
+#   vars.RAILWAY_PROJECT_ID     Project ID (Project → Settings → General)
+#   vars.RAILWAY_SERVICE        Service name or ID to deploy
+#   vars.RAILWAY_ENVIRONMENT    Optional, defaults to "production"
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-railway
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    container: ghcr.io/railwayapp/cli:latest
+    env:
+      RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+      RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
+      RAILWAY_SERVICE: ${{ vars.RAILWAY_SERVICE }}
+      RAILWAY_ENVIRONMENT: ${{ vars.RAILWAY_ENVIRONMENT || 'production' }}
+    steps:
+      - name: Check configuration
+        run: |
+          missing=""
+          [ -n "$RAILWAY_API_TOKEN" ] || missing="$missing secrets.RAILWAY_API_TOKEN"
+          [ -n "$RAILWAY_PROJECT_ID" ] || missing="$missing vars.RAILWAY_PROJECT_ID"
+          [ -n "$RAILWAY_SERVICE" ] || missing="$missing vars.RAILWAY_SERVICE"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repo configuration:$missing"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Link project
+        run: |
+          railway link \
+            --project "$RAILWAY_PROJECT_ID" \
+            --service "$RAILWAY_SERVICE" \
+            --environment "$RAILWAY_ENVIRONMENT"
+
+      - name: Deploy
+        run: |
+          railway up --ci \
+            --service "$RAILWAY_SERVICE" \
+            --environment "$RAILWAY_ENVIRONMENT"
