@@ -1,4 +1,5 @@
 import { promisify } from 'util';
+import { isIP } from 'net';
 import axios, { AxiosResponse, LookupAddress } from 'axios';
 import { logger } from '../middleware/logger';
 
@@ -69,6 +70,15 @@ function ipv4FromV6(ip: string): string | null {
 async function resolveAndCheck(hostname: string): Promise<void> {
   if (BLOCKED_HOSTS.has(hostname.toLowerCase())) {
     throw new SsrfError(`Blocked host: ${hostname}`);
+  }
+
+  // IP literals skip DNS entirely — Node's http.request also skips `lookup`
+  // for them, so this is the only place they can be checked.
+  if (isIP(hostname)) {
+    if (isPrivateIP(hostname)) {
+      throw new SsrfError(`Blocked private/internal IP: ${hostname}`);
+    }
+    return;
   }
 
   let addresses: string[];
