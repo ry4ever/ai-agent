@@ -48,8 +48,24 @@ app.use(helmet({
     },
   },
 }));
-app.use(cors({ origin: '*', methods: ['GET', 'POST', 'OPTIONS'] }));
-app.use(express.json({ limit: '10mb' }));
+// CORS: honour ALLOWED_ORIGINS (comma-separated) when set, else fall back to '*'.
+// In production the fallback logs a warning so operators know to lock it down.
+const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? '')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+if (allowedOrigins.length === 0 && process.env.NODE_ENV === 'production') {
+  logger.warn('ALLOWED_ORIGINS is unset in production — CORS is open to all origins');
+}
+app.use(
+  cors({
+    origin: allowedOrigins.length > 0 ? allowedOrigins : '*',
+    methods: ['GET', 'POST', 'OPTIONS'],
+  })
+);
+// 1mb comfortably exceeds the largest paid-endpoint zod schema (~500kb) while
+// shrinking the unpaid-rejection payload budget by 10x.
+app.use(express.json({ limit: '1mb' }));
 app.use(requestLogger);
 app.use(rateLimitByAgent);
 
