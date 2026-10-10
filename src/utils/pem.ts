@@ -60,3 +60,20 @@ export function sec1ToP256Pkcs8Pem(sec1Pem: string): string {
   const lines = pkcs8.toString('base64').match(/.{1,64}/g)!.join('\n');
   return `-----BEGIN PRIVATE KEY-----\n${lines}\n-----END PRIVATE KEY-----\n`;
 }
+
+/**
+ * Normalises the CDP API key secret as the CDP SDK expects it:
+ *   1. Replaces literal `\n` with real newlines (Railway stores env vars on
+ *      a single line, so the key arrives escaped).
+ *   2. Converts SEC1 EC PEM to PKCS#8 PEM so jose v6's importPKCS8 accepts it.
+ *
+ * Pure — no process.env mutation. Returns undefined for an empty/missing input.
+ */
+export function normalizeCdpApiKeySecret(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  const unescaped = raw.replace(/\\n/g, '\n');
+  if (unescaped.includes('-----BEGIN EC PRIVATE KEY-----')) {
+    return sec1ToP256Pkcs8Pem(unescaped);
+  }
+  return unescaped;
+}
