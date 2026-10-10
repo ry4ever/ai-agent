@@ -10,6 +10,7 @@ import { logger } from './logger';
 import { normalizeCdpApiKeySecret } from '../utils/pem';
 import type { RouteConfig } from '@x402/core/server';
 import { FACILITATOR_URL } from '../config/network';
+import { revenueTrackerHook } from '../payments/revenue-tracker';
 
 // The CDP SDK's facilitator config needs a PKCS#8-formatted key. Previously
 // this module mutated `process.env.CDP_API_KEY_SECRET` at module load, which
@@ -85,7 +86,11 @@ export function getResourceServer(): x402ResourceServer {
 
   _resourceServer = new x402ResourceServer(facilitatorClient)
     .register('eip155:84532', new ExactEvmScheme())  // Base Sepolia (testnet)
-    .register('eip155:8453', new ExactEvmScheme());   // Base Mainnet
+    .register('eip155:8453', new ExactEvmScheme())   // Base Mainnet
+    // Revenue tracking fires only when a payment actually settles on-chain;
+    // the paywall cancels the settlement on 4xx/5xx responses, so no DB row
+    // is written for cancelled payments. See src/payments/revenue-tracker.ts.
+    .onAfterSettle(revenueTrackerHook);
 
   _resourceServer.registerExtension(bazaarResourceServerExtension);
 

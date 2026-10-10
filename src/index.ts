@@ -6,7 +6,6 @@ import helmet from 'helmet';
 import { requestLogger, logger } from './middleware/logger';
 import { initRateLimiter, rateLimitByAgent } from './middleware/rate-limiter';
 import { getPaywall } from './middleware/x402-paywall';
-import { trackRevenue } from './payments/revenue-tracker';
 import { initWallet } from './payments/wallet';
 import { runMigrations, closePool } from './db/queries';
 import { closeRedis } from './utils/redis';
@@ -27,8 +26,12 @@ import { statsHandler } from './discovery/stats';
 import { transactionsHandler } from './discovery/transactions';
 import { landingHandler } from './discovery/landing';
 import { requireAdmin } from './middleware/admin-auth';
+import { validateBody } from './middleware/validate-body';
 import { mcpHttpHandler } from './mcp/http-server';
-import { PRICING } from './config/pricing';
+import { ExtractRequestSchema } from './services/data-api/extract';
+import { ContractRequestSchema } from './services/sub-agents/contract-analyzer';
+import { CodeReviewRequestSchema } from './services/sub-agents/code-reviewer';
+import { ResearchRequestSchema } from './services/sub-agents/research-synth';
 
 const app = express();
 const PORT = parseInt(process.env.PORT ?? '3000', 10);
@@ -91,17 +94,25 @@ app.delete('/mcp', mcpHttpHandler()); // session termination
 function mountPaywalledRoutes(): void {
   const paywall = getPaywall();
 
+  // Revenue is recorded by the x402 resource server's AfterSettleHook
+  // (see src/middleware/x402-paywall.ts), so no per-route tracking middleware
+  // is needed here — the hook only fires on successful settlement, so
+  // cancelled payments on 4xx/5xx no longer leave ghost DB rows.
+
   // Data API
-  app.get('/api/v1/sentiment/:ticker', paywall, trackRevenue('/api/v1/sentiment', PRICING.SENTIMENT), sentimentHandler);
-  app.get('/api/v1/company/:domain', paywall, trackRevenue('/api/v1/company', PRICING.COMPANY), companyHandler);
-  app.get('/api/v1/enrich/email/:email', paywall, trackRevenue('/api/v1/enrich/email', PRICING.ENRICH), enrichHandler);
-  app.get('/api/v1/news/summary', paywall, trackRevenue('/api/v1/news/summary', PRICING.NEWS), newsHandler);
-  app.post('/api/v1/extract', paywall, trackRevenue('/api/v1/extract', PRICING.EXTRACT), extractHandler);
+  app.get('/api/v1/sentiment/:ticker', paywall, sentimentHandler);
+  app.get('/api/v1/company/:domain', paywall, companyHandler);
+  app.get('/api/v1/enrich/email/:email', paywall, enrichHandler);
+  app.get('/api/v1/news/summary', paywall, newsHandler);
+  // POST routes validate the body BEFORE the paywall. A bad body short-
+  // circuits with 400 before any x402 verification runs — avoiding a
+  // facilitator round-trip plus the verify-then-cancel cycle entirely.
+  app.post('/api/v1/extract', validateBody(ExtractRequestSchema), paywall, extractHandler);
 
   // Sub-agent services
-  app.post('/api/v1/analyze/contract', paywall, trackRevenue('/api/v1/analyze/contract', PRICING.CONTRACT_ANALYZER), contractAnalyzerHandler);
-  app.post('/api/v1/review/code', paywall, trackRevenue('/api/v1/review/code', PRICING.CODE_REVIEWER), codeReviewerHandler);
-  app.post('/api/v1/research', paywall, trackRevenue('/api/v1/research', PRICING.RESEARCH_SYNTH), researchSynthHandler);
+  app.post('/api/v1/analyze/contract', validateBody(ContractRequestSchema), paywall, contractAnalyzerHandler);
+  app.post('/api/v1/review/code', validateBody(CodeReviewRequestSchema), paywall, codeReviewerHandler);
+  app.post('/api/v1/research', validateBody(ResearchRequestSchema), paywall, researchSynthHandler);
 }
 
 // --- Startup ---
