@@ -3,16 +3,35 @@ import { Request, Response, NextFunction } from 'express';
 import { insertTransaction, upsertDailyRevenue } from '../db/queries';
 import { paymentLogger, logger } from '../middleware/logger';
 
+// Upper bound on how long we'll block the paid response waiting for the two
+// bookkeeping writes to settle. The paywall has already settled on-chain by
+// the time this middleware runs, so the service MUST execute — but we also
+// want the writes to complete before SIGTERM drains the pool. 2s balances
+// both: typical write is <50ms, SIGTERM drain cuts us off cleanly.
+const DB_WRITE_TIMEOUT_MS = 2000;
+
 // This middleware runs after a successful x402 payment verification.
 // It logs the payment to the database and updates daily revenue aggregates.
 export function trackRevenue(
   endpoint: string,
   priceInMicroUSDC: string
 ) {
-  return (req: Request, _res: Response, next: NextFunction): void => {
+  return async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
     // Extract payment info from request (populated by x402 middleware)
     const paymentHeader = req.headers['x-payment'] as string | undefined;
-    const agentAddress = (req.headers['x-agent-address'] as string) ?? '0x0000000000000000000000000000000000000000';
+    // The agent address is the EIP-3009 `authorization.from` inside the signed
+    // X-PAYMENT payload — the facilitator already verified the signature, so
+    // this field is authentic. Previously we read `x-agent-address` from the
+    // request headers, which was attacker-controlled: any caller could set it
+    // to anything, poisoning per-agent analytics and the `unique_agents` count.
+    const extractedAddress = paymentHeader ? extractAgentAddress(paymentHeader) : null;
+    const agentAddress = extractedAddress ?? ZERO_ADDRESS;
+    if (paymentHeader && !extractedAddress) {
+      logger.warn('Payment header present but no payer address could be extracted', {
+        event: 'unparseable_payment_payload',
+        endpoint,
+      });
+    }
 
     // Convert micro-USDC to USDC decimal
     const amountUSDC = parseInt(priceInMicroUSDC) / 1_000_000;
@@ -38,14 +57,14 @@ export function trackRevenue(
 
     const logCtx = { txHash, agentAddress, endpoint, amountUSDC };
 
-    // Decoupled, non-blocking DB writes. Each operation runs independently
-    // with its own error handler. Previously both were bundled in Promise.all,
-    // so a failure in insertTransaction (e.g. a tx_hash collision) caused the
-    // whole promise to reject and overshadowed upsertDailyRevenue — which
-    // still succeeded silently in the background. That decoupling bug is why
-    // revenue_daily filled up while the transactions table stayed nearly empty.
-    // The user has already paid, so we must never fail the request over logging.
-    insertTransaction({
+    // Decoupled writes: each has its own catch handler so a tx_hash collision
+    // in insertTransaction doesn't swallow a working upsertDailyRevenue (and
+    // vice versa). The user has already paid, so we must never fail the request
+    // over bookkeeping — but we DO wait for the writes (up to DB_WRITE_TIMEOUT_MS)
+    // before releasing next() so (a) a healthy DB settles before response, and
+    // (b) in-flight writes complete before SIGTERM drains the pool. Previously
+    // these were fire-and-forget, which meant SIGTERM could abort them.
+    const insertPromise = insertTransaction({
       tx_hash: txHash,
       agent_address: agentAddress,
       service_endpoint: endpoint,
@@ -68,7 +87,7 @@ export function trackRevenue(
         });
       });
 
-    upsertDailyRevenue({
+    const upsertPromise = upsertDailyRevenue({
       service_endpoint: endpoint,
       amount_usdc: amountUSDC,
       agent_address: agentAddress,
@@ -81,11 +100,79 @@ export function trackRevenue(
       });
     });
 
+    // Promise.allSettled never rejects — the race only loses to the timeout.
+    try {
+      await Promise.race([
+        Promise.allSettled([insertPromise, upsertPromise]),
+        new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('db_write_timeout')), DB_WRITE_TIMEOUT_MS);
+        }),
+      ]);
+    } catch {
+      // Writes keep running in the background; their own catch handlers log
+      // the final outcome. We flag only that we gave up waiting so an op can
+      // correlate slow responses with the DB.
+      logger.error('Revenue tracking writes exceeded timeout', {
+        event: 'revenue_write_timeout',
+        ...logCtx,
+        timeout_ms: DB_WRITE_TIMEOUT_MS,
+      });
+    }
+
     next();
   };
 }
 
 const EVM_TX_HASH_RE = /^0x[a-fA-F0-9]{64}$/;
+const EVM_ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+
+/**
+ * Extract the payer address from an x402 payment header.
+ *
+ * The USDC-on-Base scheme is EIP-3009 TransferWithAuthorization: the signed
+ * payload is `{ ..., payload: { signature, authorization: { from, to, value,
+ * validAfter, validBefore, nonce } } }`, where `authorization.from` is the
+ * signer. Because the facilitator already verified the signature by the time
+ * this function runs, the `from` field cannot be forged — the one on the
+ * client header could.
+ *
+ * Falls back to a shallow recursive search for a 20-byte-hex `from` field if
+ * the exact EIP-3009 shape doesn't match (future-proofing for Permit2 and
+ * other schemes). Returns null if nothing usable is found.
+ */
+export function extractAgentAddress(paymentHeader: string): string | null {
+  const decoded = tryDecodeB64Json(paymentHeader);
+  if (decoded === null || typeof decoded !== 'object') return null;
+
+  // EIP-3009 fast-path: PaymentPayloadV1.payload.authorization.from
+  const payload = (decoded as { payload?: unknown }).payload;
+  if (payload && typeof payload === 'object') {
+    const auth = (payload as { authorization?: unknown }).authorization;
+    if (auth && typeof auth === 'object') {
+      const from = (auth as { from?: unknown }).from;
+      if (typeof from === 'string' && EVM_ADDRESS_RE.test(from)) {
+        return from.toLowerCase();
+      }
+    }
+  }
+
+  // Fallback: any nested `from` field matching an EVM address.
+  const fallback = findFromAddress(decoded);
+  return fallback ? fallback.toLowerCase() : null;
+}
+
+function findFromAddress(node: unknown): string | null {
+  if (!node || typeof node !== 'object') return null;
+  for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
+    if (key === 'from' && typeof value === 'string' && EVM_ADDRESS_RE.test(value)) {
+      return value;
+    }
+    const nested = findFromAddress(value);
+    if (nested) return nested;
+  }
+  return null;
+}
 
 /**
  * Extract a transaction hash from an x402 payment header.

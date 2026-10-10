@@ -13,7 +13,7 @@ vi.mock('../src/middleware/logger', () => ({
   paymentLogger: vi.fn(),
 }));
 
-import { trackRevenue, extractTxHash } from '../src/payments/revenue-tracker';
+import { trackRevenue, extractTxHash, extractAgentAddress } from '../src/payments/revenue-tracker';
 import { insertTransaction, upsertDailyRevenue } from '../src/db/queries';
 
 function mockReq(headers: Record<string, string> = {}): Request {
@@ -42,10 +42,10 @@ describe('trackRevenue middleware', () => {
     vi.restoreAllMocks();
   });
 
-  it('calls next() immediately (non-blocking)', async () => {
+  it('calls next() after the writes settle', async () => {
     const next = vi.fn() as unknown as NextFunction;
     const middleware = trackRevenue('/api/v1/test', '2000');
-    middleware(mockReq(), mockRes(), next);
+    await middleware(mockReq(), mockRes(), next);
     expect(next).toHaveBeenCalled();
   });
 
@@ -85,17 +85,73 @@ describe('trackRevenue middleware', () => {
     );
   });
 
+  it('derives agent address from the signed X-PAYMENT payload (not a client header)', async () => {
+    // The EIP-3009 payload the facilitator has already verified. If the server
+    // trusts the client-supplied x-agent-address header, an attacker can set it
+    // to anything; the signed authorization.from field is the only authentic
+    // signer identity.
+    const signer = '0xAbCdEf0123456789abcdef0123456789aBcDeF01';
+    const header = Buffer
+      .from(JSON.stringify({
+        x402Version: 1,
+        scheme: 'exact',
+        network: 'base-sepolia',
+        payload: {
+          signature: '0xdeadbeef',
+          authorization: {
+            from: signer,
+            to: '0x1111111111111111111111111111111111111111',
+            value: '2000',
+            validAfter: '0',
+            validBefore: '99999999',
+            nonce: '0x' + '0'.repeat(64),
+          },
+        },
+      }))
+      .toString('base64');
+
+    const next = vi.fn() as unknown as NextFunction;
+    const middleware = trackRevenue('/api/v1/test', '2000');
+    middleware(
+      mockReq({ 'x-payment': header, 'x-agent-address': '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' }),
+      mockRes(),
+      next,
+    );
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(insertTransaction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agent_address: signer.toLowerCase(),
+      }),
+    );
+  });
+
   it('does not throw when DB writes fail (error is caught)', async () => {
     vi.mocked(insertTransaction).mockRejectedValueOnce(new Error('DB down'));
     const next = vi.fn() as unknown as NextFunction;
     const middleware = trackRevenue('/api/v1/test', '1000');
 
-    expect(() => middleware(mockReq(), mockRes(), next)).not.toThrow();
+    await expect(middleware(mockReq(), mockRes(), next)).resolves.toBeUndefined();
     expect(next).toHaveBeenCalled();
-
-    // Allow the rejected promise to settle without crashing the process
-    await new Promise((r) => setTimeout(r, 50));
   });
+
+  it('releases next() after DB_WRITE_TIMEOUT_MS even when writes hang', async () => {
+    // Simulate a hung DB: a promise that never resolves.
+    vi.mocked(insertTransaction).mockImplementationOnce(() => new Promise(() => {}));
+    vi.mocked(upsertDailyRevenue).mockImplementationOnce(() => new Promise(() => {}));
+
+    const next = vi.fn() as unknown as NextFunction;
+    const middleware = trackRevenue('/api/v1/test', '1000');
+
+    const start = Date.now();
+    await middleware(mockReq(), mockRes(), next);
+    const elapsed = Date.now() - start;
+
+    expect(next).toHaveBeenCalled();
+    // 2s timeout — generous bound either side for CI variance
+    expect(elapsed).toBeGreaterThanOrEqual(1900);
+    expect(elapsed).toBeLessThan(3500);
+  }, 5000);
 
   it('keeps insertTransaction and upsertDailyRevenue independent (decoupled)', async () => {
     // insertTransaction fails but upsertDailyRevenue must still be attempted
@@ -148,5 +204,53 @@ describe('extractTxHash', () => {
   it('handles a non-JSON base64 header gracefully', () => {
     const hash = extractTxHash(Buffer.from('not-json-at-all').toString('base64'));
     expect(hash).toMatch(/^0x[a-f0-9]{64}$/);
+  });
+});
+
+describe('extractAgentAddress', () => {
+  const EVM_ADDR = '0xAbCdEf0123456789abcdef0123456789aBcDeF01';
+
+  function b64(obj: unknown): string {
+    return Buffer.from(JSON.stringify(obj)).toString('base64');
+  }
+
+  it('reads payload.authorization.from (EIP-3009 shape) and lowercases it', () => {
+    const header = b64({
+      x402Version: 1,
+      scheme: 'exact',
+      network: 'base-mainnet',
+      payload: {
+        signature: '0xdeadbeef',
+        authorization: {
+          from: EVM_ADDR,
+          to: '0x1111111111111111111111111111111111111111',
+          value: '1000',
+          validAfter: '0',
+          validBefore: '99999999',
+          nonce: '0x' + '0'.repeat(64),
+        },
+      },
+    });
+    expect(extractAgentAddress(header)).toBe(EVM_ADDR.toLowerCase());
+  });
+
+  it('falls back to a nested `from` field if the EIP-3009 shape is missing', () => {
+    // Some future scheme or wrapped payload: a `from` lives somewhere else.
+    const header = b64({ payload: { signer: { from: EVM_ADDR } } });
+    expect(extractAgentAddress(header)).toBe(EVM_ADDR.toLowerCase());
+  });
+
+  it('returns null when no 20-byte-hex `from` field is present', () => {
+    const header = b64({ x402Version: 1, scheme: 'exact', network: 'base-sepolia' });
+    expect(extractAgentAddress(header)).toBeNull();
+  });
+
+  it('rejects a `from` field that is not a valid EVM address', () => {
+    const header = b64({ payload: { authorization: { from: '0xNOTANADDRESS' } } });
+    expect(extractAgentAddress(header)).toBeNull();
+  });
+
+  it('returns null for a non-JSON header rather than throwing', () => {
+    expect(extractAgentAddress(Buffer.from('garbage').toString('base64'))).toBeNull();
   });
 });

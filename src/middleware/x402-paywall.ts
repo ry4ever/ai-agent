@@ -7,21 +7,16 @@ import { bazaarResourceServerExtension } from '@x402/extensions/bazaar';
 import type { RequestHandler } from 'express';
 import { routeConfigs } from '../config/x402-bazaar-config';
 import { logger } from './logger';
-import { sec1ToP256Pkcs8Pem } from '../utils/pem';
+import { normalizeCdpApiKeySecret } from '../utils/pem';
 import type { RouteConfig } from '@x402/core/server';
 import { FACILITATOR_URL } from '../config/network';
 
-// Normalise CDP_API_KEY_SECRET once at module load:
-//   1. Replace literal \n (Railway env var storage) with real newlines
-//   2. Convert SEC1 PEM (BEGIN EC PRIVATE KEY) → PKCS#8 (BEGIN PRIVATE KEY)
-//      because jose v6 / importPKCS8 rejects SEC1 format
-{
-  let key = (process.env.CDP_API_KEY_SECRET || '').replace(/\\n/g, '\n');
-  if (key.includes('-----BEGIN EC PRIVATE KEY-----')) {
-    key = sec1ToP256Pkcs8Pem(key);
-  }
-  process.env.CDP_API_KEY_SECRET = key;
-}
+// The CDP SDK's facilitator config needs a PKCS#8-formatted key. Previously
+// this module mutated `process.env.CDP_API_KEY_SECRET` at module load, which
+// (1) raced with src/payments/wallet.ts doing its own normalization, and
+// (2) made every later process.env.CDP_API_KEY_SECRET read return a key that
+// may already have been converted — a hidden side effect of a bare import.
+// Normalize at the single call site below instead.
 
 /**
  * Custom paywall provider that fixes the x402 library's display bug:
@@ -81,7 +76,10 @@ export function getResourceServer(): x402ResourceServer {
 
   // Always use the CDP facilitator (supports both mainnet and Sepolia).
   // CDP enables payment auto-tracking, x402 Bazaar listing, and the full x402 protocol flow.
-  const facilitatorConfig = createFacilitatorConfig(process.env.CDP_API_KEY_ID, process.env.CDP_API_KEY_SECRET);
+  const facilitatorConfig = createFacilitatorConfig(
+    process.env.CDP_API_KEY_ID,
+    normalizeCdpApiKeySecret(process.env.CDP_API_KEY_SECRET),
+  );
 
   const facilitatorClient = new HTTPFacilitatorClient(facilitatorConfig);
 
