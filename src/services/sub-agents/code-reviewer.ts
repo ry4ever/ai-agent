@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 import { logger } from '../../middleware/logger';
+import { serializeError } from '../../utils/serialize-error';
 
 export const CodeReviewRequestSchema = z.object({
   code: z.string().max(100_000),
@@ -61,7 +62,7 @@ export async function codeReviewerHandler(req: Request, res: Response): Promise<
     const result = await reviewCode({ code, language, filename, context, apiKey: anthropicKey });
     res.json(result);
   } catch (err) {
-    logger.error('Code review failed', { filename, err });
+    logger.error('Code review failed', { filename, ...serializeError(err) });
     res.status(502).json({ error: 'Code review failed' });
   }
 }
@@ -74,7 +75,11 @@ async function reviewCode(params: {
   apiKey: string;
 }): Promise<CodeReviewResult> {
   const { code, language, filename, context, apiKey } = params;
-  const client = new Anthropic({ apiKey, timeout: 30_000 });
+  // maxRetries: 0 so Anthropic SDK's default 2 retries don't balloon a 30s
+  // timeout into 90s of hanging. Paywall cancels settlement on the eventual
+  // 5xx (PR #4), so failing fast costs the user nothing and lets us
+  // reproduce + debug faster.
+  const client = new Anthropic({ apiKey, timeout: 25_000, maxRetries: 0 });
 
   const langHint = language ?? (filename ? inferLanguage(filename) : 'unknown');
   const contextNote = context ? `\nContext: ${context}` : '';

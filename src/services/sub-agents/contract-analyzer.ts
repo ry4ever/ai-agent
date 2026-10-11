@@ -3,8 +3,9 @@ import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 import { logger } from '../../middleware/logger';
 import { safeFetch, SsrfError } from '../../utils/ssrf-guard';
+import { serializeError } from '../../utils/serialize-error';
 
-const AI_TIMEOUT_MS = 30_000;
+const AI_TIMEOUT_MS = 25_000;
 
 export const ContractRequestSchema = z.object({
   url: z.string().url().optional(),
@@ -83,7 +84,7 @@ export async function contractAnalyzerHandler(req: Request, res: Response): Prom
     const analysis = await analyzeContract(contractText, anthropicKey);
     res.json(analysis);
   } catch (err) {
-    logger.error('Contract analysis failed', { url, err });
+    logger.error('Contract analysis failed', { url, ...serializeError(err) });
     res.status(502).json({ error: 'Contract analysis failed' });
   }
 }
@@ -112,7 +113,8 @@ async function fetchContractText(url: string): Promise<string> {
 }
 
 async function analyzeContract(contractText: string, apiKey: string): Promise<ContractAnalysis> {
-  const client = new Anthropic({ apiKey, timeout: AI_TIMEOUT_MS });
+  // maxRetries: 0 — see rationale in code-reviewer.ts (same reason).
+  const client = new Anthropic({ apiKey, timeout: AI_TIMEOUT_MS, maxRetries: 0 });
 
   // Truncate to fit context window while keeping key parts
   const truncated = contractText.length > 80000
