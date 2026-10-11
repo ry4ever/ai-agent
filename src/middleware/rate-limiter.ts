@@ -9,7 +9,10 @@ let redisAvailable = true;
 function getRedisClient(): Redis | null {
   try {
     const client = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', {
-      enableOfflineQueue: false,
+      // Buffer commands briefly during reconnect instead of failing them
+      // immediately. See src/utils/redis.ts for the full rationale; the
+      // 'fail-open' catch below is still the ultimate safety net.
+      enableOfflineQueue: true,
       lazyConnect: true,
       maxRetriesPerRequest: 3,
     });

@@ -8,7 +8,12 @@ export function getRedisClient(): Redis | null {
 
   try {
     redisClient = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', {
-      enableOfflineQueue: false,
+      // Buffer commands briefly during reconnect instead of failing them
+      // immediately with "Stream isn't writeable". `maxRetriesPerRequest: 3`
+      // caps the wait per command, and callers already handle errors (cache
+      // falls back to origin, rate limiter fails open), so a short queue
+      // avoids spurious error logs during normal Redis flaps.
+      enableOfflineQueue: true,
       retryStrategy: (times) => {
         if (times > 10) {
           logger.warn('Redis retry limit reached — backing off for 30s');
