@@ -3,6 +3,7 @@ import axios from 'axios';
 import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 import { logger } from '../../middleware/logger';
+import { serializeError } from '../../utils/serialize-error';
 
 export const ResearchRequestSchema = z.object({
   question: z.string().min(10).max(500),
@@ -58,7 +59,7 @@ export async function researchSynthHandler(req: Request, res: Response): Promise
     const result = await synthesizeResearch({ question, depth, apiKey: anthropicKey });
     res.json(result);
   } catch (err) {
-    logger.error('Research synthesis failed', { question, err });
+    logger.error('Research synthesis failed', { question, ...serializeError(err) });
     res.status(502).json({ error: 'Research synthesis failed' });
   }
 }
@@ -73,7 +74,8 @@ async function synthesizeResearch(params: {
   // Gather sources from news API if available
   const sources = await gatherSources(question, depth);
 
-  const client = new Anthropic({ apiKey, timeout: 45_000 });
+  // maxRetries: 0 — see rationale in code-reviewer.ts.
+  const client = new Anthropic({ apiKey, timeout: 45_000, maxRetries: 0 });
   const sourcesContext = sources.length > 0
     ? `\n\nRelevant sources found:\n${sources.map((s, i) => `${i + 1}. ${s.title} (${s.url}): ${s.snippet}`).join('\n')}`
     : '';

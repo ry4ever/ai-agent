@@ -4,6 +4,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 import { logger } from '../../middleware/logger';
 import { safeFetch, SsrfError } from '../../utils/ssrf-guard';
+import { serializeError } from '../../utils/serialize-error';
 
 export const ExtractRequestSchema = z.object({
   url: z.string().url().optional(),
@@ -87,7 +88,7 @@ export async function extractHandler(req: Request, res: Response): Promise<void>
     const result = await extractStructuredData(resolvedUrl, html);
     res.json(result);
   } catch (err) {
-    logger.error('Extraction failed', { url, err });
+    logger.error('Extraction failed', { url, ...serializeError(err) });
     res.status(500).json({ error: 'Internal extraction error', url });
   }
 }
@@ -155,7 +156,8 @@ async function extractWithClaude(
   tables: Record<string, string>[][],
   wordCount: number
 ): Promise<ExtractResult> {
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 30_000 });
+  // maxRetries: 0 — see rationale in code-reviewer.ts.
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25_000, maxRetries: 0 });
 
   const response = await client.messages.create({
     model: 'claude-haiku-4-5-20251001',
