@@ -430,7 +430,7 @@ export function landingHandler(_req: Request, res: Response): void {
   <!-- ── HOW TO USE ── -->
   <section id="how-to-use">
     <div class="section-label">Quick start</div>
-    <h2>Four ways to integrate</h2>
+    <h2>Five ways to integrate</h2>
     <p class="section-sub">Pick the integration that fits your stack. All handle x402 payments automatically.</p>
 
     <div class="code-tabs">
@@ -488,7 +488,7 @@ aiscale-pay contract --url contract.pdf <span class="dim"># $0.10</span>
 <span class="hi">import</span> { registerExactEvmScheme } <span class="hi">from</span> '@x402/evm/exact/client';
 <span class="hi">import</span> { privateKeyToAccount } <span class="hi">from</span> 'viem/accounts';
 
-<span class="hi">const</span> account = privateKeyToAccount(process.env.PRIVATE_KEY);
+<span class="hi">const</span> account = privateKeyToAccount(process.env.MCP_PRIVATE_KEY);
 <span class="hi">const</span> client = <span class="hi">new</span> x402Client();
 registerExactEvmScheme(client, { signer: account });
 
@@ -501,6 +501,7 @@ registerExactEvmScheme(client, { signer: account });
 console.log(data.score); <span class="dim">// e.g. 0.72 (bullish)</span></div>
 
     <div id="tab-python" class="code-block" style="display:none"><span class="dim"># pip install x402-httpx</span>
+<span class="hi">import</span> os
 <span class="hi">import</span> x402_httpx
 
 client = x402_httpx.Client(

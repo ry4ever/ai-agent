@@ -19,5 +19,7 @@ export type PricingKey = keyof typeof PRICING;
 
 // Convert micro-units to display USD string
 export function microToUSD(microUnits: string): string {
-  return (parseInt(microUnits) / 1_000_000).toFixed(4).replace(/\.?0+$/, '');
+  const val = parseInt(microUnits) / 1_000_000;
+  if (val >= 0.01) return val.toFixed(2);
+  return val.toFixed(4).replace(/0+$/, '').replace(/\.$/, '');
 }
