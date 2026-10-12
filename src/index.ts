@@ -25,6 +25,9 @@ import { healthHandler } from './discovery/health';
 import { statsHandler } from './discovery/stats';
 import { transactionsHandler } from './discovery/transactions';
 import { landingHandler } from './discovery/landing';
+import { robotsHandler } from './discovery/robots';
+import { llmsHandler } from './discovery/llms';
+import { openapiHandler } from './discovery/openapi';
 import { requireAdmin } from './middleware/admin-auth';
 import { validateBody } from './middleware/validate-body';
 import { mcpHttpHandler } from './mcp/http-server';
@@ -80,6 +83,13 @@ app.get('/stats/transactions', requireAdmin, transactionsHandler);
 app.get('/.well-known/agent-services', registryHandler);
 app.get('/.well-known/agent.json', agentCardHandler);
 app.get('/.well-known/agent-card.json', agentCardHandler);
+// x402 standard discovery URL (observed crawlers probe this exact path).
+// Same payload as /.well-known/agent-services — one source of truth.
+app.get('/.well-known/x402', registryHandler);
+// Compliant-crawler discovery (OpenAPI, llms.txt, robots.txt).
+app.get('/openapi.json', openapiHandler);
+app.get('/llms.txt', llmsHandler);
+app.get('/robots.txt', robotsHandler);
 
 // --- MCP Streamable HTTP endpoint ---
 // Smithery and remote MCP clients connect here. Tool calls route to the
