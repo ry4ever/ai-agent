@@ -1,0 +1,40 @@
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [CI]
+    branches: [main]
+    types: [completed]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate required settings
+        run: |
+          missing=()
+          [[ -z "${{ secrets.RAILWAY_API_TOKEN }}" ]]   && missing+=("RAILWAY_API_TOKEN (secret)")
+          [[ -z "${{ vars.RAILWAY_PROJECT_ID }}" ]]     && missing+=("RAILWAY_PROJECT_ID (variable)")
+          [[ -z "${{ vars.RAILWAY_SERVICE }}" ]]         && missing+=("RAILWAY_SERVICE (variable)")
+          if [[ ${#missing[@]} -gt 0 ]]; then
+            echo "Missing required repo settings:"
+            printf '  - %s\n' "${missing[@]}"
+            exit 1
+          fi
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+        run: |
+          railway link \
+            --project "${{ vars.RAILWAY_PROJECT_ID }}" \
+            --service "${{ vars.RAILWAY_SERVICE }}" \
+            --environment "${{ vars.RAILWAY_ENVIRONMENT || 'production' }}"
+          railway up --ci --detach
