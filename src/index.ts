@@ -30,6 +30,7 @@ import { llmsHandler } from './discovery/llms';
 import { openapiHandler } from './discovery/openapi';
 import { requireAdmin } from './middleware/admin-auth';
 import { validateBody } from './middleware/validate-body';
+import { methodNotAllowedHandler } from './middleware/method-not-allowed';
 import { mcpHttpHandler } from './mcp/http-server';
 import { ExtractRequestSchema } from './services/data-api/extract';
 import { ContractRequestSchema } from './services/sub-agents/contract-analyzer';
@@ -164,6 +165,11 @@ async function start(): Promise<void> {
 
     // Mount all paywalled routes
     mountPaywalledRoutes();
+
+    // 405 for wrong-method requests on known paid routes (so an indexer
+    // probing `POST /api/v1/news/summary` on our GET-only endpoint gets
+    // `Allow: GET` instead of a bare 404). Must come after mountPaywalledRoutes().
+    app.use(methodNotAllowedHandler);
 
     // Error handler must be registered AFTER all routes to catch their errors
     app.use(
