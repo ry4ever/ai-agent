@@ -5,6 +5,10 @@ import { z } from 'zod';
 import { logger } from '../../middleware/logger';
 import { safeFetch, SsrfError } from '../../utils/ssrf-guard';
 import { serializeError } from '../../utils/serialize-error';
+import { recordEstimatedCost } from '../../utils/cost-tracker';
+import { estimateAnthropicCostUSD } from '../../utils/anthropic-cost';
+
+const MODEL = 'claude-haiku-4-5-20251001';
 
 export const ExtractRequestSchema = z.object({
   url: z.string().url().optional(),
@@ -85,7 +89,7 @@ export async function extractHandler(req: Request, res: Response): Promise<void>
       resolvedUrl = url;
     }
 
-    const result = await extractStructuredData(resolvedUrl, html);
+    const result = await extractStructuredData(req, resolvedUrl, html);
     res.json(result);
   } catch (err) {
     logger.error('Extraction failed', { url, ...serializeError(err) });
@@ -93,7 +97,7 @@ export async function extractHandler(req: Request, res: Response): Promise<void>
   }
 }
 
-async function extractStructuredData(url: string, html: string): Promise<ExtractResult> {
+async function extractStructuredData(req: Request, url: string, html: string): Promise<ExtractResult> {
   const $ = cheerio.load(html);
 
   // Remove noise
@@ -139,7 +143,7 @@ async function extractStructuredData(url: string, html: string): Promise<Extract
   const anthropicKey = process.env.ANTHROPIC_API_KEY;
   if (anthropicKey && anthropicKey !== 'your_anthropic_api_key') {
     try {
-      return await extractWithClaude(url, title, bodyText.slice(0, 8000), tables, wordCount);
+      return await extractWithClaude(req, url, title, bodyText.slice(0, 8000), tables, wordCount);
     } catch (err) {
       logger.warn('Claude extraction failed, using basic extraction', { err });
     }
@@ -150,6 +154,7 @@ async function extractStructuredData(url: string, html: string): Promise<Extract
 }
 
 async function extractWithClaude(
+  req: Request,
   url: string,
   title: string,
   text: string,
@@ -160,7 +165,7 @@ async function extractWithClaude(
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25_000, maxRetries: 0 });
 
   const response = await client.messages.create({
-    model: 'claude-haiku-4-5-20251001',
+    model: MODEL,
     max_tokens: 2048,
     messages: [
       {
@@ -181,6 +186,13 @@ Return only valid JSON.`,
   const raw = response.content[0].type === 'text' ? response.content[0].text : '{}';
   const jsonMatch = raw.match(/\{[\s\S]*\}/);
   const parsed = jsonMatch ? (JSON.parse(jsonMatch[0]) as { entities?: ExtractedEntity[]; facts?: string[] }) : {};
+
+  recordEstimatedCost(req, {
+    provider: 'anthropic',
+    source: MODEL,
+    usd: estimateAnthropicCostUSD(MODEL, response.usage),
+    detail: { endpoint: '/api/v1/extract', input_tokens: response.usage?.input_tokens, output_tokens: response.usage?.output_tokens },
+  });
 
   return {
     url,
