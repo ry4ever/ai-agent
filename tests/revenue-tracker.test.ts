@@ -15,6 +15,7 @@ vi.mock('../src/middleware/logger', () => ({
 import { revenueTrackerHook, EXPORTED_FOR_TESTS } from '../src/payments/revenue-tracker';
 import { insertTransaction, upsertDailyRevenue } from '../src/db/queries';
 import { logger } from '../src/middleware/logger';
+import { recordEstimatedCost } from '../src/utils/cost-tracker';
 
 function makeCtx(overrides: Record<string, unknown> = {}): Parameters<typeof revenueTrackerHook>[0] {
   const txHash = '0x' + 'a'.repeat(64);
@@ -100,6 +101,45 @@ describe('revenueTrackerHook', () => {
     }));
     expect(insertTransaction).toHaveBeenCalledWith(
       expect.objectContaining({ agent_address: '0xabcdef0123456789abcdef0123456789abcdef01' }),
+    );
+  });
+
+  it('persists estCostUSD and costBreakdown in metadata when the handler recorded costs', async () => {
+    const fakeReq = {} as never;
+    recordEstimatedCost(fakeReq, {
+      provider: 'anthropic',
+      source: 'claude-sonnet-4-6',
+      usd: 0.004,
+      detail: { endpoint: '/api/v1/review/code' },
+    });
+    const ctx = makeCtx({
+      transportContext: {
+        request: {
+          method: 'POST',
+          path: '/api/v1/review/code',
+          adapter: { req: fakeReq },
+        },
+      },
+    });
+    await revenueTrackerHook(ctx);
+    expect(insertTransaction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          estCostUSD: 0.004,
+          costBreakdown: expect.arrayContaining([
+            expect.objectContaining({ provider: 'anthropic', source: 'claude-sonnet-4-6', usd: 0.004 }),
+          ]),
+        }),
+      }),
+    );
+  });
+
+  it('persists null estCostUSD when no cost was recorded', async () => {
+    await revenueTrackerHook(makeCtx());
+    expect(insertTransaction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({ estCostUSD: null, costBreakdown: null }),
+      }),
     );
   });
 

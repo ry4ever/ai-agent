@@ -1,8 +1,10 @@
 import { createHash } from 'crypto';
+import type { Request } from 'express';
 import type { AfterSettleHook, SettleResultContext } from '@x402/core/server';
 import { insertTransaction, upsertDailyRevenue } from '../db/queries';
 import { paymentLogger, logger } from '../middleware/logger';
 import { routeConfigs } from '../config/x402-bazaar-config';
+import { readCostBreakdown } from '../utils/cost-tracker';
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 
@@ -48,11 +50,17 @@ export const revenueTrackerHook: AfterSettleHook = async (ctx: SettleResultConte
   if (!ctx.result.success) return;
 
   const transport = ctx.transportContext as
-    | { request?: { method?: string; path?: string; paymentHeader?: string } }
+    | { request?: { method?: string; path?: string; paymentHeader?: string; adapter?: { req?: Request } } }
     | undefined;
   const method = (transport?.request?.method ?? 'UNKNOWN').toUpperCase();
   const path = transport?.request?.path ?? '';
   const endpoint = labelFor(method, path);
+
+  // Handlers record per-provider cost estimates against the Express req via
+  // the WeakMap in utils/cost-tracker; we read it here and persist alongside
+  // revenue so each DB row carries both sides of the margin.
+  const expressReq = transport?.request?.adapter?.req;
+  const costBreakdown = readCostBreakdown(expressReq);
 
   // Agent address comes from the facilitator's verified payer first, then
   // the signed EIP-3009 `authorization.from` as a fallback (same source;
@@ -86,6 +94,8 @@ export const revenueTrackerHook: AfterSettleHook = async (ctx: SettleResultConte
       network: ctx.result.network,
       method,
       path,
+      estCostUSD: costBreakdown?.totalUSD ?? null,
+      costBreakdown: costBreakdown?.entries ?? null,
     },
   })
     .then(() => {

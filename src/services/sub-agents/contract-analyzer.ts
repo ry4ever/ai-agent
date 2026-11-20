@@ -4,8 +4,11 @@ import { z } from 'zod';
 import { logger } from '../../middleware/logger';
 import { safeFetch, SsrfError } from '../../utils/ssrf-guard';
 import { serializeError } from '../../utils/serialize-error';
+import { recordEstimatedCost } from '../../utils/cost-tracker';
+import { estimateAnthropicCostUSD } from '../../utils/anthropic-cost';
 
 const AI_TIMEOUT_MS = 25_000;
+const MODEL = 'claude-sonnet-4-6';
 
 export const ContractRequestSchema = z.object({
   url: z.string().url().optional(),
@@ -81,7 +84,13 @@ export async function contractAnalyzerHandler(req: Request, res: Response): Prom
       return;
     }
 
-    const analysis = await analyzeContract(contractText, anthropicKey);
+    const { result: analysis, usage } = await analyzeContract(contractText, anthropicKey);
+    recordEstimatedCost(req, {
+      provider: 'anthropic',
+      source: MODEL,
+      usd: estimateAnthropicCostUSD(MODEL, usage),
+      detail: { endpoint: '/api/v1/analyze/contract', input_tokens: usage?.input_tokens, output_tokens: usage?.output_tokens },
+    });
     res.json(analysis);
   } catch (err) {
     logger.error('Contract analysis failed', { url, ...serializeError(err) });
@@ -112,7 +121,7 @@ async function fetchContractText(url: string): Promise<string> {
   return buffer.toString('utf-8').replace(/[\x00-\x1F\x7F-\xFF]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 50000);
 }
 
-async function analyzeContract(contractText: string, apiKey: string): Promise<ContractAnalysis> {
+async function analyzeContract(contractText: string, apiKey: string): Promise<{ result: ContractAnalysis; usage: Anthropic.Messages.Usage | undefined }> {
   // maxRetries: 0 — see rationale in code-reviewer.ts (same reason).
   const client = new Anthropic({ apiKey, timeout: AI_TIMEOUT_MS, maxRetries: 0 });
 
@@ -122,7 +131,7 @@ async function analyzeContract(contractText: string, apiKey: string): Promise<Co
     : contractText;
 
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-6',
+    model: MODEL,
     max_tokens: 4096,
     system: SYSTEM_PROMPT,
     messages: [
@@ -150,8 +159,11 @@ ${truncated}`,
   const parsed = JSON.parse(jsonMatch[0]) as Omit<ContractAnalysis, 'analyzedAt'>;
 
   return {
-    ...parsed,
-    overallRiskScore: Math.max(1, Math.min(10, parsed.overallRiskScore)),
-    analyzedAt: new Date().toISOString(),
+    result: {
+      ...parsed,
+      overallRiskScore: Math.max(1, Math.min(10, parsed.overallRiskScore)),
+      analyzedAt: new Date().toISOString(),
+    },
+    usage: response.usage,
   };
 }

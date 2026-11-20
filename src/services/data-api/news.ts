@@ -3,8 +3,11 @@ import axios from 'axios';
 import Anthropic from '@anthropic-ai/sdk';
 import { getRedisClient } from '../../utils/redis';
 import { logger } from '../../middleware/logger';
+import { recordEstimatedCost } from '../../utils/cost-tracker';
+import { estimateAnthropicCostUSD } from '../../utils/anthropic-cost';
 
 const CACHE_TTL = 3600; // 1 hour
+const MODEL = 'claude-haiku-4-5-20251001';
 
 interface NewsSummary {
   title: string;
@@ -46,7 +49,7 @@ export async function newsHandler(req: Request, res: Response): Promise<void> {
   }
 
   try {
-    const result = await fetchAndSummarizeNews(query);
+    const result = await fetchAndSummarizeNews(req, query);
 
     if (redis) {
       await redis.setex(cacheKey, CACHE_TTL, JSON.stringify(result)).catch(() => {});
@@ -72,7 +75,7 @@ interface NewsAPIResponse {
   articles?: NewsAPIArticle[];
 }
 
-async function fetchAndSummarizeNews(query: string): Promise<NewsResult> {
+async function fetchAndSummarizeNews(req: Request, query: string): Promise<NewsResult> {
   const newsApiKey = process.env.NEWS_API_KEY;
   let articles: NewsAPIArticle[] = [];
 
@@ -96,7 +99,7 @@ async function fetchAndSummarizeNews(query: string): Promise<NewsResult> {
   }
 
   // Build summaries, using Claude if available for better quality
-  const summaries = await buildSummaries(query, articles);
+  const summaries = await buildSummaries(req, query, articles);
 
   return {
     query,
@@ -106,7 +109,7 @@ async function fetchAndSummarizeNews(query: string): Promise<NewsResult> {
   };
 }
 
-async function buildSummaries(query: string, articles: NewsAPIArticle[]): Promise<NewsSummary[]> {
+async function buildSummaries(req: Request, query: string, articles: NewsAPIArticle[]): Promise<NewsSummary[]> {
   if (articles.length === 0) {
     return [];
   }
@@ -123,7 +126,7 @@ async function buildSummaries(query: string, articles: NewsAPIArticle[]): Promis
         .join('\n');
 
       const response = await client.messages.create({
-        model: 'claude-haiku-4-5-20251001',
+        model: MODEL,
         max_tokens: 1024,
         messages: [
           {
@@ -131,6 +134,13 @@ async function buildSummaries(query: string, articles: NewsAPIArticle[]): Promis
             content: `Summarize these news articles about "${query}" in 1-2 sentences each. Return a JSON array with objects containing "index" (1-based) and "summary" fields only.\n\nArticles:\n${articleText}`,
           },
         ],
+      });
+
+      recordEstimatedCost(req, {
+        provider: 'anthropic',
+        source: MODEL,
+        usd: estimateAnthropicCostUSD(MODEL, response.usage),
+        detail: { endpoint: '/api/v1/news/summary', input_tokens: response.usage?.input_tokens, output_tokens: response.usage?.output_tokens },
       });
 
       const text = response.content[0].type === 'text' ? response.content[0].text : '';
