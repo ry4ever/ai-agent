@@ -3,6 +3,10 @@ import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 import { logger } from '../../middleware/logger';
 import { serializeError } from '../../utils/serialize-error';
+import { recordEstimatedCost } from '../../utils/cost-tracker';
+import { estimateAnthropicCostUSD } from '../../utils/anthropic-cost';
+
+const MODEL = 'claude-sonnet-4-6';
 
 export const CodeReviewRequestSchema = z.object({
   code: z.string().max(100_000),
@@ -59,7 +63,13 @@ export async function codeReviewerHandler(req: Request, res: Response): Promise<
   const { code, language, filename, context } = parseResult.data;
 
   try {
-    const result = await reviewCode({ code, language, filename, context, apiKey: anthropicKey });
+    const { result, usage } = await reviewCode({ code, language, filename, context, apiKey: anthropicKey });
+    recordEstimatedCost(req, {
+      provider: 'anthropic',
+      source: MODEL,
+      usd: estimateAnthropicCostUSD(MODEL, usage),
+      detail: { endpoint: '/api/v1/review/code', input_tokens: usage?.input_tokens, output_tokens: usage?.output_tokens },
+    });
     res.json(result);
   } catch (err) {
     logger.error('Code review failed', { filename, ...serializeError(err) });
@@ -73,7 +83,7 @@ async function reviewCode(params: {
   filename?: string;
   context?: string;
   apiKey: string;
-}): Promise<CodeReviewResult> {
+}): Promise<{ result: CodeReviewResult; usage: Anthropic.Messages.Usage | undefined }> {
   const { code, language, filename, context, apiKey } = params;
   // maxRetries: 0 so Anthropic SDK's default 2 retries don't balloon a 30s
   // timeout into 90s of hanging. Paywall cancels settlement on the eventual
@@ -85,7 +95,7 @@ async function reviewCode(params: {
   const contextNote = context ? `\nContext: ${context}` : '';
 
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-6',
+    model: MODEL,
     max_tokens: 4096,
     system: SYSTEM_PROMPT,
     messages: [
@@ -117,9 +127,12 @@ ${code}
   const parsed = JSON.parse(jsonMatch[0]) as Omit<CodeReviewResult, 'reviewedAt'>;
 
   return {
-    ...parsed,
-    overallScore: Math.max(1, Math.min(10, parsed.overallScore)),
-    reviewedAt: new Date().toISOString(),
+    result: {
+      ...parsed,
+      overallScore: Math.max(1, Math.min(10, parsed.overallScore)),
+      reviewedAt: new Date().toISOString(),
+    },
+    usage: response.usage,
   };
 }
 

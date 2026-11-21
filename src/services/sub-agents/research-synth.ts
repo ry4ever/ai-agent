@@ -4,6 +4,8 @@ import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 import { logger } from '../../middleware/logger';
 import { serializeError } from '../../utils/serialize-error';
+import { recordEstimatedCost } from '../../utils/cost-tracker';
+import { estimateAnthropicCostUSD } from '../../utils/anthropic-cost';
 
 export const ResearchRequestSchema = z.object({
   question: z.string().min(10).max(500),
@@ -56,7 +58,13 @@ export async function researchSynthHandler(req: Request, res: Response): Promise
   const { question, depth } = parseResult.data;
 
   try {
-    const result = await synthesizeResearch({ question, depth, apiKey: anthropicKey });
+    const { result, usage, model } = await synthesizeResearch({ question, depth, apiKey: anthropicKey });
+    recordEstimatedCost(req, {
+      provider: 'anthropic',
+      source: model,
+      usd: estimateAnthropicCostUSD(model, usage),
+      detail: { endpoint: '/api/v1/research', depth, input_tokens: usage?.input_tokens, output_tokens: usage?.output_tokens },
+    });
     res.json(result);
   } catch (err) {
     logger.error('Research synthesis failed', { question, ...serializeError(err) });
@@ -68,7 +76,7 @@ async function synthesizeResearch(params: {
   question: string;
   depth: 'quick' | 'standard' | 'deep';
   apiKey: string;
-}): Promise<ResearchResult> {
+}): Promise<{ result: ResearchResult; usage: Anthropic.Messages.Usage | undefined; model: string }> {
   const { question, depth, apiKey } = params;
 
   // Gather sources from news API if available
@@ -117,13 +125,17 @@ Return a JSON object:
   ].slice(0, 10);
 
   return {
-    question,
-    summary: parsed.summary ?? '',
-    keyFindings: parsed.keyFindings ?? [],
-    sections: parsed.sections ?? [],
-    citations: allCitations,
-    confidence: Math.max(0, Math.min(1, parsed.confidence ?? 0.5)),
-    generatedAt: new Date().toISOString(),
+    result: {
+      question,
+      summary: parsed.summary ?? '',
+      keyFindings: parsed.keyFindings ?? [],
+      sections: parsed.sections ?? [],
+      citations: allCitations,
+      confidence: Math.max(0, Math.min(1, parsed.confidence ?? 0.5)),
+      generatedAt: new Date().toISOString(),
+    },
+    usage: response.usage,
+    model,
   };
 }
 
